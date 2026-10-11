@@ -106,6 +106,32 @@ on `fit` windows only. Outputs in `data/processed/`: `window_features.parquet`,
 - *Added `tests/test_feature_builder.py`* (not in the spec's layout list) to test windowing,
   fit-only bins and the standardiser. 17 tests pass in total.
 
+## Step 03: z-score baseline (2026-10-11)
+
+**What was done.** `pipeline/step03_score_zscore_baseline.py` (0.3 s) scored every window with the max
+(and mean) over the 7 analog window means of |z|, using mean/std from `fit` windows only
+(`outputs/models/zscore_reference.json`). Scores for 252,720 windows (242,358 usable) are in
+`outputs/scores/zscore_baseline_scores.parquet`.
+
+**Key numbers** (`reports/tables/thresholds.json`, 7,100 usable calib windows).
+
+| score | 99th percentile | 99.5th percentile |
+|---|---|---|
+| max_abs_z (primary) | 4.705 | 6.334 |
+| mean_abs_z | 2.129 | 2.434 |
+
+**Decisions and reasons.**
+- *Thresholds are written before the model's test windows are scored.* The script scores the
+  non-test windows, computes the calib percentiles, writes them to `thresholds.json` (entry stamped
+  `frozen_at` 2026-10-11T11:17:26), and only then scores the test windows.
+  Later models follow the same order within their own step, so each model's thresholds are frozen
+  before that model scores test. A single global "all thresholds before any test scoring" is not
+  possible when models are trained in later steps.
+- *Alert rule*: score strictly above the threshold (`alert_thresholds.alert_mask`).
+- *The baseline uses only the 7 analog window means*, as the spec says; the std and digital
+  features are for the VAE and RBM.
+- Tests added in `tests/test_alert_thresholds.py` (22 tests pass in total).
+
 ## Possible future work
 
 - None yet.
