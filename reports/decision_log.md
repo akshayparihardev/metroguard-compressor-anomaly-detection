@@ -394,6 +394,43 @@ flagged, 36.35 unconfirmed/day; both detect 4 of 4.
 - Evidence that thresholds were frozen before test scoring (`frozen_at` timestamps versus score-file
   modification times) is printed at the end of `metrics.md`.
 
+## Step 09: final report, README and definition-of-done check (2026-10-11)
+
+**What was done.** Wrote `reports/final_report.md` (nine sections, numbers taken only from saved outputs),
+completed `README.md` and added `pipeline/run_all_steps.py` (steps 2 to 8 in order, each skipping itself
+when up to date). A full forced run of steps 2 to 8 finished in 119.6 s (step 1: 55.0 s; about 174.6 s in
+total); it reproduced `metrics.csv` and every threshold exactly.
+
+**Definition of done (spec section 6).**
+- Layout matches 2.1, names follow 2.2, no stray or duplicate files: **passed, with documented additions**
+  not in the 2.1 tree: `src/metroguard/raw_data_audit.py`, `src/metroguard/pgmpy_import_fallback.py`,
+  `tests/test_feature_builder.py`, and extra tables in `reports/tables/` (training histories and Bayesian
+  network tables). No forbidden names (`utils`, `helpers`, `misc`, `temp`, `v2`, ...) in tracked files.
+- All steps run in order from the raw CSV: **passed on this checkout** (`run_all_steps.py --force`
+  after step 1). **Not tested** from a literal fresh clone with a new virtual environment.
+- `pytest` (35 tests, including the RBM brute-force free-energy test) and `ruff check` / `ruff format`:
+  **passed**.
+- `thresholds.json` written before test scoring, timestamps noted: **passed per model** (each model's
+  `frozen_at` precedes its own test scoring; evidence table at the end of `metrics.md`). A single global
+  "all thresholds before any test scoring" is not possible when models are trained in later steps (see
+  step 03).
+- `metrics.csv` has a row per model including the baseline and all three CD-k variants: **passed**.
+- Figures for data audit, RBM and VAE training curves, scores vs time with windows, per-event zooms, CD-k
+  comparison and the Bayesian-network DAG: **passed**.
+- `final_report.md` uses only saved numbers and includes limitations, the theory section and runtime:
+  **passed**. Unit numbers I and V in the syllabus table are left for the author, because the spec does not
+  name them.
+- No synthetic data, no causal or prediction claims, no "false alarm" wording: **passed** (the phrase appears
+  only in sentences that rule it out).
+- One commit per completed step: **mostly**. Steps 1 and 7 have a second commit (torch pin and environment
+  record; hash-seed reproducibility fix), and the step 1 environment note was written after the step 1
+  commit.
+
+**Honest summary of results.** No learned model beat the simple z-score baseline; all models flagged far more
+test windows than the 1% they were calibrated to, because February is not representative of later months;
+"4 of 4 events detected" is weak evidence because the detection ranges cover only 4.2% of the test period; the
+Markov model was the most selective (3 of 4, 3.65 unconfirmed alerts per day).
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train
