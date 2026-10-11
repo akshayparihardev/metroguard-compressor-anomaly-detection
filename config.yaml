@@ -1,0 +1,25 @@
+seed: 42
+paths:
+  raw_csv: data/raw/MetroPT3(AirCompressor).csv
+  processed_dir: data/processed
+  models_dir: outputs/models
+  scores_dir: outputs/scores
+  logs_dir: outputs/logs
+  tables_dir: reports/tables
+  figures_dir: reports/figures
+  reports_dir: reports
+audit:
+  gap_multiplier: 2
+  long_gap_hours: 1
+  near_constant_fraction: 0.005
+  event_context_hours: 24
+  display_resample_minutes: 10
+  frozen_run_min_minutes: 60
+split: {train_period: first_calendar_month, calib_fraction: 0.2, fit_validation_fraction: 0.1}
+windows: {size_seconds: 60, min_readings_fraction: 0.5}
+discretise: {n_bins: 3, method: quantile}
+rbm: {n_hidden: 32, k_values: [1, 5, 10], epochs: 30, batch_size: 256, learning_rate: 0.01, momentum: 0.5, weight_decay: 0.0001}
+vae: {latent_dim: 6, hidden_sizes: [64, 32], epochs: 50, batch_size: 256, learning_rate: 0.001, beta: 1.0, early_stopping_patience: 5}
+thresholds: {percentiles: [99, 99.5], primary_percentile: 99}
+alerts: {merge_gap_minutes: 10, min_event_windows: 1}
+evaluation: {lead_tolerance_hours: 24}

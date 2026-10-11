@@ -1,0 +1,11 @@
+# Pinned versions verified on Windows 11, Python 3.14.
+# Newer numpy (2.5.x) and torch DLLs were blocked by Windows Application Control on this
+# machine; see reports/decision_log.md (step 01). torch is added in step 5.
+numpy==2.4.6
+pandas==2.3.3
+pyarrow==23.0.1
+matplotlib==3.10.8
+PyYAML==6.0.3
+pgmpy==1.1.2
+pytest==9.1.1
+ruff==0.17.0
