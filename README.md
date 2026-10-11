@@ -1,45 +1,141 @@
-# MetroGuard
+<div align="center">
 
-Anomaly detection on real metro air-compressor telemetry (MetroPT-3, UCI). Five approaches learn what
-"normal" looks like from the first month of data and score how unusual later periods look: a z-score
-baseline, an RBM trained with Gibbs sampling and contrastive divergence (written from scratch, no packaged
-RBM), a VAE, a Markov chain over motor-current states, and a Bayesian network that explains alerts. Results
-are evaluated at event level against four operator-reported air-leak intervals.
+# 🚇 MetroGuard
 
-Course project for Deep Learning II (CDT7001). Exploratory: four reported events on one machine, and no
-claim of failure prediction or causation.
+### Teaching a metro train's air compressor to tell us when something looks wrong
 
-## What it found
+Unsupervised anomaly detection on **1.5 million real sensor readings**, built from scratch with an RBM,
+a VAE, a Markov chain and a Bayesian network, and evaluated honestly against four reported air leaks.
 
-- Thresholds fitted on the training month flag only about 1% of that month, but **10% to 21% of later windows**
-  for the baseline, RBM and VAE, because the training month is not representative of the rest of the record.
-- All of those models "detect" the four reported windows, but the detection ranges cover only 4.2% of the test
-  period, so that is weak evidence. **No learned model beat the z-score baseline.**
-- The Markov chain is the most selective (0.44% of windows flagged) and detects three of four events.
+![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-CUDA-EE4C2C?logo=pytorch&logoColor=white)
+![pgmpy](https://img.shields.io/badge/pgmpy-Bayesian%20networks-0b7a75)
+![Dashboard](https://img.shields.io/badge/Dashboard-static%20%C2%B7%20Vercel-000000?logo=vercel&logoColor=white)
+![Status](https://img.shields.io/badge/Status-exploratory-orange)
 
-Details and numbers: [`reports/final_report.md`](reports/final_report.md). Every decision and its reason:
-[`reports/decision_log.md`](reports/decision_log.md). A read-only dashboard of the results lives in
-[`dashboard/`](dashboard/README.md).
+</div>
 
-## Repository layout
+---
+
+## 🎯 The problem
+
+A metro train's **air production unit** (the compressor) feeds the train's pneumatic systems. When it starts
+leaking or degrading, the train can be pulled out of service, and the first sign is usually buried in sensor data
+nobody is watching.
+
+The data exists. The labels almost don't:
+
+- 📈 **1,516,948 readings** from 15 sensors (7 analog, 8 on/off), one every 10 seconds, over 213 days.
+- 🏷️ **Four** company-reported air-leak intervals. Not a label per reading, just four time windows.
+- 🔇 Failures are rare, so there is nothing to train a normal classifier on.
+
+A maintenance team cannot read 1.5 million rows. They need the data to **speak up when it looks unusual**,
+and to say *where* to look.
+
+## 💡 What MetroGuard does
+
+It learns what **normal** looks like from the first month, then scores how unusual every later minute is.
+
+1. 🧹 **Audits** the raw file: cadence, gaps, frozen sensors, near-constant signals, motor-current states.
+2. 🪟 **Windows** the data into 60-second chunks and splits it **by time**, never by shuffling.
+3. 🧠 **Scores** each window with five approaches, from a simple z-score to a Bayesian network.
+4. 🎚️ **Sets thresholds on held-out training data only**, freezes them, and only then touches the test period.
+5. 🚨 **Merges alerts into events** and judges them at **event level** against the four reported leaks.
+6. 🔎 **Explains** alerts: which sensor states look unusual together, without claiming a cause.
+7. 🖥️ **Shows everything** in a read-only dashboard.
+
+## 🏗️ How it works
+
+```mermaid
+flowchart LR
+  A[("MetroPT-3 CSV<br/>1.5M readings")] --> B["1 · Audit"]
+  B --> C["2 · 60 s windows<br/>chronological split"]
+  C --> D1["Z-score<br/>baseline"]
+  C --> D2["RBM<br/>Gibbs + CD-k"]
+  C --> D3["VAE"]
+  C --> D4["Markov<br/>chain"]
+  C --> D5["Bayesian<br/>network"]
+  D1 & D2 & D3 & D4 --> E["Thresholds<br/>frozen on calib"]
+  E --> F["Alert events"]
+  F --> G["Event-level evaluation<br/>vs 4 reported leaks"]
+  D5 -. explains alerts .-> G
+  G --> H["Reports + dashboard"]
+```
+
+**The split is the heart of the design.** Nothing is ever fitted on data the model should not have seen:
 
 ```
-config.yaml                every tunable value (seed, window size, model settings, thresholds)
-src/metroguard/            library code, grouped by role
-  data/                    loading, auditing, splitting and featurising the raw readings
-  models/                  baseline, RBM, VAE, Markov chain, Bayesian network
-  alerting/                thresholds, alert events, event-level evaluation
-  reporting/               figures and the dashboard export
-  config_loader.py  artifact_names.py  step_run_tracking.py
-pipeline/                  one thin script per step (step01 ... step10) and run_all_steps.py
-tests/                     pytest, mirrors src/metroguard (no raw data needed)
-dashboard/                 read-only static site, deployed on Vercel
-reports/                   audit report, decision log, final report, tables/, figures/
-docs/                      project specification and explanations
-data/  outputs/            raw and cached data, models, scores, logs (git-ignored, regenerable)
+ Feb 2020 (training month)                                     Mar ... Sep 2020
+┌───────────────────────────┬────────────────┬────────────┐   ┌───────────────────────────┐
+│ fit_train      72%        │ fit_validation │ calib 20%  │   │ test: everything later    │
+│ model learns normal       │ early stopping │ thresholds │   │ scored only after the     │
+│                           │ only           │ only       │   │ thresholds are frozen     │
+└───────────────────────────┴────────────────┴────────────┘   └───────────────────────────┘
 ```
 
-## Quick start
+## 🧰 Concepts and techniques
+
+| Idea | Where | Why it is here |
+|---|---|---|
+| **Restricted Boltzmann Machine**, written from scratch | `models/restricted_boltzmann_machine.py` | Gibbs sampling, contrastive divergence (k = 1, 5, 10) and free energy, with a brute-force test that proves the free-energy formula. No packaged RBM. |
+| **Variational autoencoder** | `models/variational_autoencoder.py` | Reconstruction error and negative ELBO as anomaly scores, early stopping on a validation slice. |
+| **Markov chain** over motor-current states | `models/markov_state_model.py` | Scores *transitions* between operating states, so it catches odd behaviour that averages hide. |
+| **Bayesian network** | `models/bayesian_network.py` | Hill-climb structure search with BIC, BDeu parameters, d-separation and Markov-blanket reasoning to give each alert context. |
+| **Z-score baseline** | `models/zscore_baseline.py` | The honest yardstick: if a deep model cannot beat this, we say so. |
+| **Calibration thresholds** | `alerting/alert_thresholds.py` | Percentile of scores on held-out normal data, written to disk before any test scoring. |
+| **Event-level evaluation** | `alerting/event_evaluation.py` | Four windows are intervals, not labels, so we score events detected, delay and *unconfirmed* alerts, not accuracy. |
+
+## 📊 What we found
+
+At the 99th-percentile threshold, on **206,857 test windows** over 184 days:
+
+| Model | Windows flagged | Reported leaks detected | Unconfirmed alerts / day |
+|---|---:|:---:|---:|
+| Z-score baseline | 10.4% | 4 of 4 | 25.8 |
+| RBM (k = 1 / 5 / 10) | 19.9 / 20.3 / 20.8% | 4 of 4 | 30.0 / 29.8 / 28.6 |
+| VAE | 21.4% | 4 of 4 | 31.0 |
+| **Markov chain** | **0.44%** | 3 of 4 | **3.6** |
+
+What this teaches us, plainly:
+
+- 🔍 **Detecting all four leaks is a weak result.** The detection ranges cover only **4.2%** of the test period,
+  so any model that flags a tenth of all windows will overlap them by chance.
+- 📉 **February is not representative of the rest of the year.** Thresholds set to flag about 1% of the training
+  month flag 10-21% of later windows. Most of what the models detect is "different from February".
+- 🥇 **No learned model beat the simple baseline.** The RBM and VAE flag about twice as many windows and detect no
+  more events. They were also still improving when training stopped.
+- 🎯 **The Markov chain is the most selective**, flagging a fraction of a percent while still finding three leaks.
+- 🧊 **The data itself is messy:** 37.9 days with no readings, and 3.3% of readings sit in stretches where every
+  sensor is frozen (excluded from scoring).
+
+Every number comes from code that ran and saved its output. The full story, with limitations, is in
+[`reports/final_report.md`](reports/final_report.md), and every decision with its reason is in
+[`reports/decision_log.md`](reports/decision_log.md).
+
+## 🛡️ Engineering principles
+
+- ✅ **Real data only.** No synthetic or substitute data, ever.
+- 🚫 **No leakage.** Scalers, bins, state boundaries, network structure and thresholds all come from training data.
+- 🔒 **Frozen before test.** Each model's thresholds are written to disk, with a timestamp, before it sees a test window.
+- 🗣️ **Honest wording.** Alerts outside reported windows are *unconfirmed alerts*, never "false alarms". No causal
+  claims from the network, no prediction claims.
+- ♻️ **Reproducible.** Fixed seed, every setting in `config.yaml`, one command per step, and a re-run reproduces every threshold and metric exactly.
+- 🌱 **Efficient.** Raw CSV read once and cached, float32 tensors, GPU for the RBM and VAE, and each step skips
+  work whose outputs are up to date.
+- 🧪 **Tested.** 43 fast tests, including the brute-force RBM free-energy check, and `ruff`-clean code.
+
+## 🖥️ Dashboard
+
+A read-only static site (plain HTML, CSS and JavaScript) in [`dashboard/`](dashboard/README.md), built for Vercel:
+a metro-line timeline of the whole record, interactive score charts with the reported leaks marked, the
+learned Bayesian network, the metrics tables and a "what we can and cannot claim" page. Light and dark themes,
+keyboard-accessible charts, and responsive down to small phones.
+
+```
+python -m http.server 8000 --directory dashboard
+```
+
+## 🚀 Quick start
 
 Requires Python 3.14. The RBM and VAE use the GPU when PyTorch can see one, otherwise the CPU.
 
@@ -59,43 +155,56 @@ python pipeline/step01_audit_raw_data.py
 python pipeline/run_all_steps.py
 ```
 
-Both skip work whose outputs are up to date; add `--force` to recompute. On the author's machine the audit
-takes about 55 s and steps 2 to 8 about 2 minutes.
+Both skip finished work; add `--force` to recompute. The audit takes about a minute and steps 2 to 8 about two
+minutes on a laptop GPU.
 
-## Pipeline
+## 🗺️ Pipeline
 
-| Step | Script | What it does | Main outputs |
-|---|---|---|---|
-| 1 | `step01_audit_raw_data.py` | Audits the raw file (cadence, gaps, digital signals, event windows, motor states) | `reports/data_audit_report.md`, parquet cache |
-| 2 | `step02_build_features.py` | 60 s windows, chronological split, fit-only scaler, bins and state cut points | `data/processed/`, `outputs/models/` |
-| 3 | `step03_score_zscore_baseline.py` | Z-score baseline; thresholds frozen from calib | `outputs/scores/`, `reports/tables/thresholds.json` |
-| 4 | `step04_train_rbm.py` | RBM with CD-k for k = 1, 5, 10 | scores, training curves |
-| 5 | `step05_train_vae.py` | VAE with early stopping on a validation slice | scores, training curves |
-| 6 | `step06_fit_markov_states.py` | Markov chain over motor-current states | scores, transition matrix |
-| 7 | `step07_build_bayesian_network.py` | Learns the network, runs the syllabus demos, explains two alerts | `reports/tables/`, DAG figure |
-| 8 | `step08_evaluate_alerts.py` | Event-level metrics and evaluation figures | `reports/tables/metrics.*` |
-| 9 | (written report) | `reports/final_report.md` | |
-| 10 | `step10_build_dashboard_data.py` | Exports saved results for the dashboard | `dashboard/data/` |
+| Step | Script | What it does |
+|:--:|---|---|
+| 1 | `step01_audit_raw_data.py` | Audits the raw file and writes the data audit report |
+| 2 | `step02_build_features.py` | 60 s windows, chronological split, fit-only scaler, bins and state cut points |
+| 3 | `step03_score_zscore_baseline.py` | Z-score baseline, thresholds frozen from calib |
+| 4 | `step04_train_rbm.py` | RBM with contrastive divergence for k = 1, 5, 10 |
+| 5 | `step05_train_vae.py` | VAE with early stopping on a validation slice |
+| 6 | `step06_fit_markov_states.py` | Markov chain over motor-current states |
+| 7 | `step07_build_bayesian_network.py` | Learns the network, runs the demos, explains two alerts |
+| 8 | `step08_evaluate_alerts.py` | Event-level metrics and evaluation figures |
+| 9 | *(written report)* | [`reports/final_report.md`](reports/final_report.md) |
+| 10 | `step10_build_dashboard_data.py` | Exports saved results for the dashboard |
 
-Library code for each step lives in `src/metroguard/`; the scripts only parse arguments, call it and save
-outputs. Names of the files the steps pass to each other are defined once, in `artifact_names.py`.
+The scripts are thin; the logic lives in the library. File names that steps pass to each other are defined once in
+`artifact_names.py`.
 
-## Development
+## 🗂️ Repository layout
 
 ```
-pytest                              # fast, needs no raw data
-ruff check . && ruff format --check .
+config.yaml                every tunable value (seed, window size, model settings, thresholds)
+src/metroguard/            library code, grouped by role
+  data/                    loading, auditing, splitting and featurising the readings
+  models/                  baseline, RBM, VAE, Markov chain, Bayesian network
+  alerting/                thresholds, alert events, event-level evaluation
+  reporting/               figures and the dashboard export
+pipeline/                  one thin script per step, plus run_all_steps.py
+tests/                     pytest, mirrors src/metroguard (no raw data needed)
+dashboard/                 the read-only static site
+reports/                   audit report, decision log, final report, tables, figures
+docs/                      project specification
+data/  outputs/            raw and cached data, models, scores, logs (git-ignored, regenerable)
 ```
 
-- **Rules:** [`CLAUDE.md`](CLAUDE.md) holds the working rules (real data only, chronological split, nothing fitted
-  on test data, thresholds frozen before test scoring, honest wording) and
-  [`docs/project_spec.md`](docs/project_spec.md) is the single source of truth.
-- **Reproducibility:** fixed seed in `config.yaml`; step 7 pins `PYTHONHASHSEED` because pgmpy's structure
-  search breaks ties in set order.
-- **Windows note:** older builds of numpy, scipy and torch are pinned because Windows Smart App Control blocked
-  newer ones; `models/pgmpy_import_fallback.py` covers one blocked statsmodels import. See the decision log.
+## 🔭 Limitations and what comes next
 
-## Data and attribution
+- Four reported events on one machine, so the results are exploratory and cannot support general conclusions.
+- A one-month training period that does not represent the rest of the year. Training on a rolling window, or on
+  several periods, is the obvious next experiment.
+- The RBM and VAE were still improving at the configured epoch limits; longer training and a robust treatment of
+  near-constant signals are untried.
+- Reported windows are not dense labels: rows inside are not all faulty, and rows outside are not guaranteed normal.
 
-MetroPT-3 Dataset, UCI Machine Learning Repository, https://doi.org/10.24432/C5VW3R, licensed CC BY 4.0.
-The raw file is not included in this repository.
+## 🙏 Data and attribution
+
+**MetroPT-3 Dataset**, UCI Machine Learning Repository, <https://doi.org/10.24432/C5VW3R>, licensed
+CC BY 4.0. The raw file is not included in this repository.
+
+Built by [@akshayparihardev](https://github.com/akshayparihardev) as a Deep Learning II course project.
