@@ -13,6 +13,8 @@ a VAE, a Markov chain and a Bayesian network, and evaluated honestly against fou
 ![Dashboard](https://img.shields.io/badge/Dashboard-static%20%C2%B7%20Vercel-000000?logo=vercel&logoColor=white)
 ![Status](https://img.shields.io/badge/Status-exploratory-orange)
 
+### [🌐 Live dashboard](https://metroguard-compressor-anomaly-detec.vercel.app)
+
 </div>
 
 ---
@@ -126,10 +128,12 @@ Every number comes from code that ran and saved its output. The full story, with
 
 ## 🖥️ Dashboard
 
+**Live:** <https://metroguard-compressor-anomaly-detec.vercel.app>
+
 A read-only static site (plain HTML, CSS and JavaScript) in [`dashboard/`](dashboard/README.md), built for Vercel:
 a metro-line timeline of the whole record, interactive score charts with the reported leaks marked, the
-learned Bayesian network, the metrics tables and a "what we can and cannot claim" page. Light and dark themes,
-keyboard-accessible charts, and responsive down to small phones.
+learned Bayesian network, the metrics tables and a "what we can and cannot claim" page. A light theme with an optional pure-black dark
+theme, keyboard-accessible charts, and responsive down to small phones.
 
 ```
 python -m http.server 8000 --directory dashboard

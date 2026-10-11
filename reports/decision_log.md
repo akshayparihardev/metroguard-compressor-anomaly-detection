@@ -532,6 +532,15 @@ timestamps and runtimes differ, so the committed timestamped files were kept.
 whether `docs/claude_code_prompts.md` and the explainer PDF belong in a public repository, and whether to add a
 GitHub Actions workflow (tests and ruff on every push).
 
+## Dashboard deployment and default theme (2026-10-11)
+
+- Deployed on Vercel with **Root Directory `dashboard`** and the **Other** preset (no build). With the repository
+  root as the Vercel root, the whole repository was served and `/` returned 404; setting the root fixed both.
+  Live at https://metroguard-compressor-anomaly-detec.vercel.app; all six pages and the data files return 200.
+- The site now **opens in the light theme for every visitor**, regardless of the operating system setting. The dark
+  theme is opt-in through the sidebar button, the button label names the theme it switches to, and the choice is
+  remembered across pages and visits. Checked with the browser emulating a dark operating system.
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train
