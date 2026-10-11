@@ -29,6 +29,24 @@
       }
     }
   },
+  "vae": {
+    "negative_elbo": {
+      "frozen_at": "2026-10-11T11:23:00",
+      "n_calib_windows": 7100,
+      "thresholds": {
+        "99": 16.93567461013805,
+        "99.5": 26.06636742591859
+      }
+    },
+    "reconstruction_error": {
+      "frozen_at": "2026-10-11T11:23:00",
+      "n_calib_windows": 7100,
+      "thresholds": {
+        "99": 0.5737423157691962,
+        "99.5": 0.7783438226580626
+      }
+    }
+  },
   "zscore_baseline": {
     "max_abs_z": {
       "frozen_at": "2026-10-11T11:17:26",

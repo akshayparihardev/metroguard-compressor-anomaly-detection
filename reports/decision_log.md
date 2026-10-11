@@ -203,9 +203,45 @@ pattern.
   the gradient, which in practice moves the weights in a useful direction. Larger k lowers the bias
   at higher cost.
 
+## Step 05: VAE (2026-10-11)
+
+**What was done.** `src/metroguard/variational_autoencoder.py` (MLP encoder 18 -> 64 -> 32 -> (mu, log
+sigma^2) with latent 6, reparameterisation, mirrored decoder) and `pipeline/step05_train_vae.py` trained on
+`fit_train` (25,561 windows, 18 standardised features) on the **GPU (CUDA, RTX 4050)**, 44 s. Adam,
+lr 0.001, batch 256, beta 1.0, up to 50 epochs, early stopping patience 5 on `fit_validation` loss
+(2,840 windows); `calib` was never used for any training decision. Outputs:
+`outputs/models/vae.pt`, `outputs/scores/vae_scores.parquet`, `reports/tables/vae_training_history.csv`,
+`reports/figures/vae/vae_training_curves.png`.
+
+**Key numbers** (`vae_training_history.csv`, `thresholds.json`).
+- All 50 epochs ran; best epoch 47 (validation loss 2.779 = reconstruction 0.912 + KL 1.866). Early
+  stopping did not trigger, so the model was still improving at the epoch cap.
+- Frozen calib thresholds (7,100 windows, stamped 2026-10-11 11:23:00, before test scoring):
+  reconstruction_error 99th 0.5737, 99.5th 0.7783; negative_elbo 99th 16.94, 99.5th 26.07.
+
+**Findings reported, not hidden.**
+- *One-epoch training spike.* Training loss jumped to 160,060 at epoch 16 and recovered. Cause: in
+  February `LPS_active_fraction` is almost always 0 (std about 0.0005), so its rare activations
+  standardise to z up to 168.5 on `fit_train` (and up to 674.1 on `test`, which is why the figure uses a
+  log axis). A few such windows dominate a summed squared error. This is a property of the data plus the
+  spec's standardise-on-`fit` rule; the preprocessing was not changed.
+- *Consequence for evaluation*: any later window with `LPS` active will have a very large VAE score
+  and will very likely raise an alert. Step 8 will show whether this inflates unconfirmed alerts.
+- *Not converged*: best epoch 47 of 50.
+
+**Decisions and reasons.**
+- *Loss* = per-window sum of squared errors over the 18 standardised features + beta x KL(q(z|x) || N(0, I)),
+  averaged over the batch. The summed form (a Gaussian likelihood with fixed variance) keeps the KL term
+  from dominating; a per-feature mean would shrink the reconstruction term by 18x.
+- *Scores use z = mean of q(z | x)* (no sampling), so they are deterministic. Primary: mean squared
+  reconstruction error per feature. Secondary: negative ELBO = summed squared error + KL.
+- *Validation loss uses z = mean* for the same reason; training uses sampled z.
+- *Best weights are restored* after early stopping, so the saved model is the best epoch.
+- No VAE test file: the spec's test list has none for the VAE.
+
 ## Possible future work
 
+- Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train
+  the VAE longer. Not done now because it is outside the spec's fixed preprocessing and epochs.
 - Train the RBM for more epochs (its curves had not flattened at epoch 30), and compare k on
   converged models. Not done now because the spec fixes epochs at 30 and forbids tuning.
-
-- None yet.

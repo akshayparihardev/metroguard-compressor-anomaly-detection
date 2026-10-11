@@ -222,3 +222,25 @@ def plot_rbm_training_curves(histories: dict[int, pd.DataFrame], path: Path) -> 
     axes[0].legend(fontsize=8)
     fig.suptitle("RBM training curves: fit (solid) and fit_validation (dashed), CD-k")
     return save_figure(fig, path)
+
+
+def plot_vae_training_curves(history: pd.DataFrame, path: Path) -> Path:
+    """Training and fit_validation loss per epoch, with the early-stopping best epoch."""
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+    best_epoch = int(history.loc[history["validation_loss"].idxmin(), "epoch"])
+    panels = (
+        ("loss", "loss per window (squared error + beta x KL)"),
+        ("reconstruction", "squared error per window (sum over features)"),
+    )
+    for ax, (metric, label) in zip(axes, panels, strict=True):
+        ax.plot(history["epoch"], history[f"train_{metric}"], label="fit (train)")
+        ax.plot(history["epoch"], history[f"validation_{metric}"], linestyle="--",
+                label="fit_validation")  # fmt: skip
+        ax.axvline(best_epoch, color="black", linestyle=":", linewidth=1,
+                   label=f"best epoch ({best_epoch})")  # fmt: skip
+        ax.set_yscale("log")
+        ax.set_xlabel("epoch")
+        ax.set_ylabel(label + " (log scale)")
+        ax.legend(fontsize=8)
+    fig.suptitle("VAE training curves; early stopping on fit_validation loss")
+    return save_figure(fig, path)
