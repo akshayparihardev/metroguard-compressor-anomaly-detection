@@ -7,14 +7,14 @@ import numpy as np
 import pandas as pd
 
 from metroguard.config_loader import AuditConfig
-from metroguard.failure_windows import (
+from metroguard.data.failure_windows import (
     REPORTED_FAILURE_WINDOWS,
     FailureWindow,
     in_any_window_mask,
     in_window_mask,
     overlapping_windows,
 )
-from metroguard.raw_data_loader import ColumnRoles
+from metroguard.data.raw_data_loader import ColumnRoles
 
 MOTOR_CURRENT_HYPOTHESIS_AMPS = (0.0, 4.0, 7.0, 9.0)
 MOTOR_CURRENT_BIN_AMPS = 0.1

@@ -6,11 +6,12 @@ from dataclasses import asdict
 
 import numpy as np
 
-from metroguard import chronological_split as split_lib
-from metroguard import feature_builder as fb
-from metroguard import raw_data_audit
+from metroguard import artifact_names as artifacts
 from metroguard.config_loader import load_config
-from metroguard.raw_data_loader import cache_path, load_readings_cache
+from metroguard.data import chronological_split as split_lib
+from metroguard.data import feature_builder as fb
+from metroguard.data import raw_data_audit
+from metroguard.data.raw_data_loader import cache_path, load_readings_cache
 from metroguard.step_run_tracking import (
     config_fingerprint,
     configure_step_logging,
@@ -19,13 +20,6 @@ from metroguard.step_run_tracking import (
 )
 
 STEP_NAME = "step02_build_features"
-WINDOW_FEATURES_FILE = "window_features.parquet"
-STANDARDISED_FEATURES_FILE = "window_standardised_features.parquet"
-DISCRETE_STATES_FILE = "window_discrete_states.parquet"
-RBM_VISIBLE_FILE = "window_rbm_visible.npz"
-STANDARDISER_FILE = "feature_standardiser.json"
-BIN_EDGES_FILE = "discretisation_bin_edges.json"
-MOTOR_CUT_POINTS_FILE = "motor_current_state_cut_points.json"
 
 
 def main() -> None:
@@ -39,13 +33,13 @@ def main() -> None:
     log = configure_step_logging(STEP_NAME, paths.logs_dir)
     processed = paths.processed_dir
     outputs = [
-        processed / WINDOW_FEATURES_FILE,
-        processed / STANDARDISED_FEATURES_FILE,
-        processed / DISCRETE_STATES_FILE,
-        processed / RBM_VISIBLE_FILE,
-        paths.models_dir / STANDARDISER_FILE,
-        paths.models_dir / BIN_EDGES_FILE,
-        paths.models_dir / MOTOR_CUT_POINTS_FILE,
+        processed / artifacts.WINDOW_FEATURES_FILE,
+        processed / artifacts.STANDARDISED_FEATURES_FILE,
+        processed / artifacts.DISCRETE_STATES_FILE,
+        processed / artifacts.RBM_VISIBLE_FILE,
+        paths.models_dir / artifacts.STANDARDISER_FILE,
+        paths.models_dir / artifacts.BIN_EDGES_FILE,
+        paths.models_dir / artifacts.MOTOR_CUT_POINTS_FILE,
     ]
     fingerprint = config_fingerprint(
         {k: sections[k] for k in ("seed", "audit", "split", "windows", "discretise")}
@@ -108,25 +102,25 @@ def main() -> None:
 
         processed.mkdir(parents=True, exist_ok=True)
         paths.models_dir.mkdir(parents=True, exist_ok=True)
-        table.to_parquet(processed / WINDOW_FEATURES_FILE, index=False)
+        table.to_parquet(processed / artifacts.WINDOW_FEATURES_FILE, index=False)
         standardised.insert(0, "window_start", table["window_start"])
-        standardised.to_parquet(processed / STANDARDISED_FEATURES_FILE, index=False)
+        standardised.to_parquet(processed / artifacts.STANDARDISED_FEATURES_FILE, index=False)
         discrete = states.join(digital_binary)
         discrete.insert(0, "window_start", table["window_start"])
-        discrete.to_parquet(processed / DISCRETE_STATES_FILE, index=False)
+        discrete.to_parquet(processed / artifacts.DISCRETE_STATES_FILE, index=False)
         np.savez_compressed(
-            processed / RBM_VISIBLE_FILE,
+            processed / artifacts.RBM_VISIBLE_FILE,
             window_start=table["window_start"].to_numpy(),
             visible=visible,
             column_names=np.array(visible_names),
         )
-        (paths.models_dir / STANDARDISER_FILE).write_text(
+        (paths.models_dir / artifacts.STANDARDISER_FILE).write_text(
             json.dumps(asdict(standardiser), indent=2), encoding="utf-8"
         )
-        (paths.models_dir / BIN_EDGES_FILE).write_text(
+        (paths.models_dir / artifacts.BIN_EDGES_FILE).write_text(
             json.dumps(bin_edges, indent=2), encoding="utf-8"
         )
-        (paths.models_dir / MOTOR_CUT_POINTS_FILE).write_text(
+        (paths.models_dir / artifacts.MOTOR_CUT_POINTS_FILE).write_text(
             json.dumps(
                 {"cut_points_amps": motor_cut_points, "states": motor_states.to_dict("records")},
                 indent=2,

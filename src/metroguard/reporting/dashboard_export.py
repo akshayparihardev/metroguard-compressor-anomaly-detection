@@ -8,9 +8,9 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
-from metroguard.chronological_split import CALIB, TEST
-from metroguard.event_evaluation import ScoredModel
-from metroguard.failure_windows import REPORTED_FAILURE_WINDOWS
+from metroguard.alerting.event_evaluation import ScoredModel
+from metroguard.data.chronological_split import CALIB, TEST
+from metroguard.data.failure_windows import REPORTED_FAILURE_WINDOWS
 
 LOG_SCORES = ("max_abs_z", "mean_abs_z", "reconstruction_error", "negative_elbo")
 MODEL_LABELS = {

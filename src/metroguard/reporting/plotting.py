@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from metroguard.failure_windows import REPORTED_FAILURE_WINDOWS, FailureWindow  # noqa: E402
+from metroguard.data.failure_windows import REPORTED_FAILURE_WINDOWS, FailureWindow  # noqa: E402
 
 FIGURE_DPI = 120
 WINDOW_SHADE_COLOUR = "tab:red"
@@ -215,8 +215,13 @@ def plot_rbm_training_curves(histories: dict[int, pd.DataFrame], path: Path) -> 
     for ax, (metric, label) in zip(axes, panels, strict=True):
         for colour, (k, history) in zip(colours, histories.items(), strict=False):
             ax.plot(history["epoch"], history[f"fit_{metric}"], color=colour, label=f"k={k} fit")
-            ax.plot(history["epoch"], history[f"validation_{metric}"], color=colour,
-                    linestyle="--", label=f"k={k} fit_validation")  # fmt: skip
+            ax.plot(
+                history["epoch"],
+                history[f"validation_{metric}"],
+                color=colour,
+                linestyle="--",
+                label=f"k={k} fit_validation",
+            )
         ax.set_xlabel("epoch")
         ax.set_ylabel(label)
     axes[0].legend(fontsize=8)
@@ -234,10 +239,19 @@ def plot_vae_training_curves(history: pd.DataFrame, path: Path) -> Path:
     )
     for ax, (metric, label) in zip(axes, panels, strict=True):
         ax.plot(history["epoch"], history[f"train_{metric}"], label="fit (train)")
-        ax.plot(history["epoch"], history[f"validation_{metric}"], linestyle="--",
-                label="fit_validation")  # fmt: skip
-        ax.axvline(best_epoch, color="black", linestyle=":", linewidth=1,
-                   label=f"best epoch ({best_epoch})")  # fmt: skip
+        ax.plot(
+            history["epoch"],
+            history[f"validation_{metric}"],
+            linestyle="--",
+            label="fit_validation",
+        )
+        ax.axvline(
+            best_epoch,
+            color="black",
+            linestyle=":",
+            linewidth=1,
+            label=f"best epoch ({best_epoch})",
+        )
         ax.set_yscale("log")
         ax.set_xlabel("epoch")
         ax.set_ylabel(label + " (log scale)")
@@ -259,13 +273,24 @@ def plot_bayesian_network_dag(edges: list[tuple[str, str]], nodes: list[str], pa
     labels = {n: n.removesuffix("_mean").removesuffix("_active") for n in nodes}
     positions = nx.spring_layout(graph, seed=DAG_LAYOUT_SEED, k=2.2, iterations=300)
     fig, ax = plt.subplots(figsize=(10, 7))
-    nx.draw_networkx_nodes(graph, positions, node_color="#cfe3f5", edgecolors="black",
-                           node_size=2600, ax=ax)  # fmt: skip
+    nx.draw_networkx_nodes(
+        graph, positions, node_color="#cfe3f5", edgecolors="black", node_size=2600, ax=ax
+    )
     nx.draw_networkx_labels(graph, positions, labels, font_size=8, ax=ax)
-    nx.draw_networkx_edges(graph, positions, arrows=True, arrowstyle="-|>", arrowsize=16,
-                           node_size=2600, width=1.3, ax=ax)  # fmt: skip
-    ax.set_title("Bayesian network learned on fit windows (Hill-Climb, BIC). "
-                 "Arrows are learned dependencies, not causes")  # fmt: skip
+    nx.draw_networkx_edges(
+        graph,
+        positions,
+        arrows=True,
+        arrowstyle="-|>",
+        arrowsize=16,
+        node_size=2600,
+        width=1.3,
+        ax=ax,
+    )
+    ax.set_title(
+        "Bayesian network learned on fit windows (Hill-Climb, BIC). "
+        "Arrows are learned dependencies, not causes"
+    )
     ax.axis("off")
     return save_figure(fig, path)
 
@@ -280,15 +305,27 @@ def _score_axis(ax: plt.Axes, score_name: str, label: str) -> None:
     ax.set_ylabel(label, fontsize=8)
 
 
-def plot_score_vs_time(window_starts: pd.Series, scores: np.ndarray, usable: np.ndarray,
-                       threshold: float, score_name: str, title: str, train_end: pd.Timestamp,
-                       path: Path) -> Path:  # fmt: skip
+def plot_score_vs_time(
+    window_starts: pd.Series,
+    scores: np.ndarray,
+    usable: np.ndarray,
+    threshold: float,
+    score_name: str,
+    title: str,
+    train_end: pd.Timestamp,
+    path: Path,
+) -> Path:
     """Hourly maximum of a window score over the full period, threshold and windows marked."""
     series = pd.Series(np.where(usable, scores, np.nan), index=pd.DatetimeIndex(window_starts))
     hourly = series.resample("1h").max()
     fig, ax = plt.subplots(figsize=(13, 4))
-    ax.plot(hourly.index, hourly.to_numpy(), linewidth=0.5, color="tab:blue",
-            label="score (hourly max, display only)")  # fmt: skip
+    ax.plot(
+        hourly.index,
+        hourly.to_numpy(),
+        linewidth=0.5,
+        color="tab:blue",
+        label="score (hourly max, display only)",
+    )
     ax.axhline(
         threshold, color="black", linestyle="--", linewidth=1, label="frozen threshold (p99)"
     )
@@ -301,8 +338,9 @@ def plot_score_vs_time(window_starts: pd.Series, scores: np.ndarray, usable: np.
     return save_figure(fig, path)
 
 
-def plot_event_zoom_scores(window: FailureWindow, panels: list[dict], lead_hours: float,
-                           after_hours: float, path: Path) -> Path:  # fmt: skip
+def plot_event_zoom_scores(
+    window: FailureWindow, panels: list[dict], lead_hours: float, after_hours: float, path: Path
+) -> Path:
     """Window scores of every model around one reported window, with its alert windows marked."""
     lead_start = window.start - pd.Timedelta(hours=lead_hours)
     start, end = lead_start, window.end + pd.Timedelta(hours=after_hours)
@@ -333,8 +371,10 @@ def plot_event_zoom_scores(window: FailureWindow, panels: list[dict], lead_hours
 def plot_cd_k_comparison(rows: pd.DataFrame, path: Path) -> Path:
     """RBM variants k = 1, 5, 10 on alert-window fraction and unconfirmed alerts per day."""
     fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-    labels = [f"k={int(k)}\n{n} of 4 events" for k, n in zip(rows["k"], rows["events_detected"],
-                                                              strict=True)]  # fmt: skip
+    labels = [
+        f"k={int(k)}\n{n} of 4 events"
+        for k, n in zip(rows["k"], rows["events_detected"], strict=True)
+    ]
     for ax, column, label in zip(
         axes,
         ("alert_window_fraction", "unconfirmed_alerts_per_day"),

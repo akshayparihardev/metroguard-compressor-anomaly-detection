@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from metroguard.alert_thresholds import alert_mask
+from metroguard.alerting.alert_thresholds import alert_mask
 
 EVENT_COLUMNS = ("start", "end", "n_alert_windows", "peak_score")
 

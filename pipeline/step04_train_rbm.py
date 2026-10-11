@@ -6,16 +6,17 @@ import numpy as np
 import pandas as pd
 import torch
 
-from metroguard import plotting
-from metroguard.alert_thresholds import fit_thresholds, freeze_thresholds
-from metroguard.chronological_split import CALIB, FIT_TRAIN, FIT_VALIDATION, TEST
+from metroguard import artifact_names as artifacts
+from metroguard.alerting.alert_thresholds import fit_thresholds, freeze_thresholds
 from metroguard.config_loader import load_config
-from metroguard.restricted_boltzmann_machine import (
+from metroguard.data.chronological_split import CALIB, FIT_TRAIN, FIT_VALIDATION, TEST
+from metroguard.models.restricted_boltzmann_machine import (
     RestrictedBoltzmannMachine,
     free_energy_scores,
     select_device,
     train_rbm,
 )
+from metroguard.reporting import plotting
 from metroguard.step_run_tracking import (
     config_fingerprint,
     configure_step_logging,
@@ -24,10 +25,6 @@ from metroguard.step_run_tracking import (
 )
 
 STEP_NAME = "step04_train_rbm"
-VISIBLE_FILE = "window_rbm_visible.npz"
-WINDOW_FEATURES_FILE = "window_features.parquet"
-SCORES_FILE = "rbm_scores.parquet"
-HISTORY_FILE = "rbm_training_history.csv"
 CURVES_FIGURE = "rbm_training_curves_cd_k.png"
 SCORE_NAME = "free_energy"
 
@@ -42,12 +39,14 @@ def main() -> None:
     paths, sections = config.paths, config.sections
     rbm_config = sections["rbm"]
     log = configure_step_logging(STEP_NAME, paths.logs_dir)
-    visible_path = paths.processed_dir / VISIBLE_FILE
-    features_path = paths.processed_dir / WINDOW_FEATURES_FILE
-    scores_path = paths.scores_dir / SCORES_FILE
-    history_path = paths.tables_dir / HISTORY_FILE
+    visible_path = paths.processed_dir / artifacts.RBM_VISIBLE_FILE
+    features_path = paths.processed_dir / artifacts.WINDOW_FEATURES_FILE
+    scores_path = paths.scores_dir / artifacts.RBM_SCORES_FILE
+    history_path = paths.tables_dir / artifacts.RBM_HISTORY_FILE
     figure_path = paths.figures_dir / "rbm" / CURVES_FIGURE
-    weight_paths = [paths.models_dir / f"rbm_k{k}.pt" for k in rbm_config["k_values"]]
+    weight_paths = [
+        paths.models_dir / artifacts.rbm_weights_file(k) for k in rbm_config["k_values"]
+    ]
     outputs = [scores_path, history_path, figure_path, *weight_paths]
     fingerprint = config_fingerprint(
         {k: sections[k] for k in ("seed", "split", "discretise", "windows", "rbm", "thresholds")}
@@ -124,7 +123,7 @@ def main() -> None:
             calib_scores = k_scores[masks[CALIB]].cpu().numpy()
             thresholds = fit_thresholds(calib_scores, sections["thresholds"]["percentiles"])
             frozen_at = freeze_thresholds(
-                paths.tables_dir / "thresholds.json",
+                paths.tables_dir / artifacts.THRESHOLDS_FILE,
                 f"rbm_k{k}",
                 SCORE_NAME,
                 thresholds,

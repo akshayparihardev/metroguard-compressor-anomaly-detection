@@ -22,7 +22,6 @@ EXPECTED_DIGITAL_SIGNALS: dict[str, str] = {
     "oil_level": "Oil_level",
     "caudal_impulses": "Caudal_impulses",
 }
-EXPECTED_DIGITAL_COUNT = 8
 
 
 class RawDataMissingError(FileNotFoundError):

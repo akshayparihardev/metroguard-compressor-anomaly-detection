@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from metroguard.chronological_split import (
+from metroguard.data.chronological_split import (
     CALIB,
     FIT_TRAIN,
     FIT_VALIDATION,

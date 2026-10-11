@@ -5,10 +5,11 @@ import json
 
 import pandas as pd
 
-from metroguard import zscore_baseline as zb
-from metroguard.alert_thresholds import fit_thresholds, freeze_thresholds
-from metroguard.chronological_split import CALIB, FIT_SPLITS, TEST
+from metroguard import artifact_names as artifacts
+from metroguard.alerting.alert_thresholds import fit_thresholds, freeze_thresholds
 from metroguard.config_loader import load_config
+from metroguard.data.chronological_split import CALIB, FIT_SPLITS, TEST
+from metroguard.models import zscore_baseline as zb
 from metroguard.step_run_tracking import (
     config_fingerprint,
     configure_step_logging,
@@ -18,9 +19,6 @@ from metroguard.step_run_tracking import (
 
 STEP_NAME = "step03_score_zscore_baseline"
 MODEL_NAME = "zscore_baseline"
-WINDOW_FEATURES_FILE = "window_features.parquet"
-SCORES_FILE = "zscore_baseline_scores.parquet"
-REFERENCE_FILE = "zscore_reference.json"
 
 
 def main() -> None:
@@ -32,10 +30,10 @@ def main() -> None:
     config = load_config()
     paths, sections = config.paths, config.sections
     log = configure_step_logging(STEP_NAME, paths.logs_dir)
-    features_path = paths.processed_dir / WINDOW_FEATURES_FILE
-    scores_path = paths.scores_dir / SCORES_FILE
-    reference_path = paths.models_dir / REFERENCE_FILE
-    thresholds_path = paths.tables_dir / "thresholds.json"
+    features_path = paths.processed_dir / artifacts.WINDOW_FEATURES_FILE
+    scores_path = paths.scores_dir / artifacts.ZSCORE_SCORES_FILE
+    reference_path = paths.models_dir / artifacts.ZSCORE_REFERENCE_FILE
+    thresholds_path = paths.tables_dir / artifacts.THRESHOLDS_FILE
     fingerprint = config_fingerprint({k: sections[k] for k in ("seed", "split", "thresholds")})
     if not args.force and is_step_up_to_date(
         STEP_NAME, paths.logs_dir, [features_path], [scores_path, reference_path], fingerprint

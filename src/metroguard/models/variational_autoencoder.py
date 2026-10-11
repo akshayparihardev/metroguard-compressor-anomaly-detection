@@ -111,10 +111,22 @@ def train_vae(
             model, validation_data, beta
         )
         rows.append(
-            dict(zip(HISTORY_COLUMNS, [epoch, train_loss, train_reconstruction, train_kl,
-                                       validation_loss, validation_reconstruction, validation_kl],
-                     strict=True))
-        )  # fmt: skip
+            dict(
+                zip(
+                    HISTORY_COLUMNS,
+                    [
+                        epoch,
+                        train_loss,
+                        train_reconstruction,
+                        train_kl,
+                        validation_loss,
+                        validation_reconstruction,
+                        validation_kl,
+                    ],
+                    strict=True,
+                )
+            )
+        )
         if validation_loss < best_loss:
             best_loss, best_state = validation_loss, copy.deepcopy(model.state_dict())
             epochs_without_improvement = 0

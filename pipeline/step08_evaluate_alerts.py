@@ -7,11 +7,12 @@ from datetime import datetime
 
 import pandas as pd
 
-from metroguard import plotting
-from metroguard.chronological_split import TEST
+from metroguard import artifact_names as artifacts
+from metroguard.alerting.event_evaluation import evaluate_scored_model, scored_models
 from metroguard.config_loader import load_config
-from metroguard.event_evaluation import evaluate_scored_model, scored_models
-from metroguard.failure_windows import REPORTED_FAILURE_WINDOWS
+from metroguard.data.chronological_split import TEST
+from metroguard.data.failure_windows import REPORTED_FAILURE_WINDOWS
+from metroguard.reporting import plotting
 from metroguard.step_run_tracking import (
     config_fingerprint,
     configure_step_logging,
@@ -20,17 +21,19 @@ from metroguard.step_run_tracking import (
 )
 
 STEP_NAME = "step08_evaluate_alerts"
-SCORE_FILES = (
-    "zscore_baseline_scores.parquet",
-    "rbm_scores.parquet",
-    "vae_scores.parquet",
-    "markov_scores.parquet",
-)
 TABLE_COLUMNS = [
-    "model", "score", "percentile", "threshold", "n_alert_windows", "alert_window_fraction",
-    "n_alert_events", "events_detected", "detected_event_ids", "unconfirmed_alert_events",
+    "model",
+    "score",
+    "percentile",
+    "threshold",
+    "n_alert_windows",
+    "alert_window_fraction",
+    "n_alert_events",
+    "events_detected",
+    "detected_event_ids",
+    "unconfirmed_alert_events",
     "unconfirmed_alerts_per_day",
-]  # fmt: skip
+]
 DELAY_COLUMNS = [f"delay_hours_event{w.event_id}" for w in REPORTED_FAILURE_WINDOWS]
 EVENT_ZOOM_AFTER_HOURS = 12
 
@@ -49,7 +52,7 @@ def metrics_markdown(
     ]
     modified = {
         f: datetime.fromtimestamp(os.path.getmtime(scores_dir / f)).isoformat(timespec="seconds")
-        for f in SCORE_FILES
+        for f in artifacts.SCORE_FILES
     }
     first = metrics.iloc[0]
     range_days = sum(
@@ -116,14 +119,19 @@ def main() -> None:
     config = load_config()
     paths, sections = config.paths, config.sections
     log = configure_step_logging(STEP_NAME, paths.logs_dir)
-    thresholds_path = paths.tables_dir / "thresholds.json"
+    thresholds_path = paths.tables_dir / artifacts.THRESHOLDS_FILE
     figures_dir = paths.figures_dir / "evaluation"
-    outputs = [paths.tables_dir / "metrics.csv", paths.tables_dir / "metrics.md"]
-    inputs = [thresholds_path, *[paths.scores_dir / f for f in SCORE_FILES]]
+    outputs = [
+        paths.tables_dir / artifacts.METRICS_CSV_FILE,
+        paths.tables_dir / artifacts.METRICS_MD_FILE,
+    ]
+    inputs = [thresholds_path, *[paths.scores_dir / f for f in artifacts.SCORE_FILES]]
     fingerprint = config_fingerprint(
-        {k: sections[k] for k in ("seed", "split", "windows", "alerts", "evaluation",
-                                  "thresholds", "rbm")}
-    )  # fmt: skip
+        {
+            k: sections[k]
+            for k in ("seed", "split", "windows", "alerts", "evaluation", "thresholds", "rbm")
+        }
+    )
     if not args.force and is_step_up_to_date(
         STEP_NAME, paths.logs_dir, inputs, outputs, fingerprint
     ):
@@ -139,9 +147,13 @@ def main() -> None:
         for scored in models:
             entry = thresholds[scored.model][scored.score]["thresholds"]
             rows += evaluate_scored_model(
-                scored, entry, window_seconds, sections["alerts"]["merge_gap_minutes"],
-                sections["alerts"]["min_event_windows"], lead_hours,
-            )  # fmt: skip
+                scored,
+                entry,
+                window_seconds,
+                sections["alerts"]["merge_gap_minutes"],
+                sections["alerts"]["min_event_windows"],
+                lead_hours,
+            )
         metrics = pd.DataFrame(rows)
         metrics.to_csv(outputs[0], index=False)
         primary = float(sections["thresholds"]["primary_percentile"])
@@ -157,19 +169,33 @@ def main() -> None:
         for scored in primary_models:
             limit = thresholds[scored.model][scored.score]["thresholds"][f"{primary:g}"]
             plotting.plot_score_vs_time(
-                scored.window_starts, scored.scores, scored.usable, limit, scored.score,
-                f"{scored.model}: {scored.score} over time", train_end,
+                scored.window_starts,
+                scored.scores,
+                scored.usable,
+                limit,
+                scored.score,
+                f"{scored.model}: {scored.score} over time",
+                train_end,
                 figures_dir / f"{scored.model}_score_vs_time.png",
-            )  # fmt: skip
+            )
             panels.append(
-                {"name": scored.model, "score": scored.score, "window_starts": scored.window_starts,
-                 "scores": scored.scores, "usable": scored.usable, "threshold": limit}
-            )  # fmt: skip
+                {
+                    "name": scored.model,
+                    "score": scored.score,
+                    "window_starts": scored.window_starts,
+                    "scores": scored.scores,
+                    "usable": scored.usable,
+                    "threshold": limit,
+                }
+            )
         for window in REPORTED_FAILURE_WINDOWS:
             plotting.plot_event_zoom_scores(
-                window, panels, lead_hours, EVENT_ZOOM_AFTER_HOURS,
+                window,
+                panels,
+                lead_hours,
+                EVENT_ZOOM_AFTER_HOURS,
                 figures_dir / f"event{window.event_id}_zoom_scores_all_models.png",
-            )  # fmt: skip
+            )
         rbm_rows = metrics[
             metrics["model"].str.startswith("rbm_k") & (metrics["percentile"] == primary)
         ]

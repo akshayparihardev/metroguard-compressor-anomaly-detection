@@ -5,10 +5,10 @@ import sys
 
 import pandas as pd
 
-from metroguard import plotting, raw_data_audit
 from metroguard.config_loader import load_config
-from metroguard.failure_windows import REPORTED_FAILURE_WINDOWS
-from metroguard.raw_data_loader import (
+from metroguard.data import raw_data_audit
+from metroguard.data.failure_windows import REPORTED_FAILURE_WINDOWS
+from metroguard.data.raw_data_loader import (
     RawDataMissingError,
     build_typed_readings,
     cache_path,
@@ -18,6 +18,7 @@ from metroguard.raw_data_loader import (
     require_raw_csv,
     save_readings_cache,
 )
+from metroguard.reporting import plotting
 from metroguard.step_run_tracking import (
     config_fingerprint,
     configure_step_logging,

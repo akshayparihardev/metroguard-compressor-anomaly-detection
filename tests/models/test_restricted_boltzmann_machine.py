@@ -3,7 +3,7 @@ import itertools
 import pytest
 import torch
 
-from metroguard.restricted_boltzmann_machine import RestrictedBoltzmannMachine, train_rbm
+from metroguard.models.restricted_boltzmann_machine import RestrictedBoltzmannMachine, train_rbm
 
 CPU = torch.device("cpu")
 

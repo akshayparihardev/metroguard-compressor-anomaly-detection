@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from metroguard.dashboard_export import (
+from metroguard.alerting.event_evaluation import ScoredModel
+from metroguard.reporting.dashboard_export import (
     build_metrics,
     cell_value,
     compact_json,
@@ -14,7 +15,6 @@ from metroguard.dashboard_export import (
     read_markdown_sections,
     table_records,
 )
-from metroguard.event_evaluation import ScoredModel
 
 MARKDOWN = """# Title
 

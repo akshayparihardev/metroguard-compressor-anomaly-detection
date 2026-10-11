@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from metroguard.alert_thresholds import (
+from metroguard.alerting.alert_thresholds import (
     alert_mask,
     fit_thresholds,
     freeze_thresholds,

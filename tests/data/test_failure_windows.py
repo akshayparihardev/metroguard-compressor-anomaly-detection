@@ -1,6 +1,6 @@
 import pandas as pd
 
-from metroguard.failure_windows import (
+from metroguard.data.failure_windows import (
     REPORTED_FAILURE_WINDOWS,
     in_any_window_mask,
     in_window_mask,

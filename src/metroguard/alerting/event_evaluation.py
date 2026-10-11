@@ -6,10 +6,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from metroguard.alert_events import build_alert_events
-from metroguard.alert_thresholds import alert_mask
-from metroguard.chronological_split import TEST
-from metroguard.failure_windows import REPORTED_FAILURE_WINDOWS, FailureWindow
+from metroguard import artifact_names as artifacts
+from metroguard.alerting.alert_events import build_alert_events
+from metroguard.alerting.alert_thresholds import alert_mask
+from metroguard.data.chronological_split import TEST
+from metroguard.data.failure_windows import REPORTED_FAILURE_WINDOWS, FailureWindow
 
 PRIMARY_SCORE_NAMES = (
     "max_abs_z",
@@ -39,18 +40,18 @@ class ScoredModel:
 def scored_models(scores_dir: Path, rbm_k_values: list[int]) -> list[ScoredModel]:
     """Load every saved score table into a uniform list of (model, score) series."""
     layout = {
-        "zscore_baseline_scores.parquet": [
+        artifacts.ZSCORE_SCORES_FILE: [
             ("zscore_baseline", "max_abs_z", "max_abs_z"),
             ("zscore_baseline", "mean_abs_z", "mean_abs_z"),
         ],
-        "rbm_scores.parquet": [
+        artifacts.RBM_SCORES_FILE: [
             (f"rbm_k{k}", "free_energy", f"free_energy_k{k}") for k in rbm_k_values
         ],
-        "vae_scores.parquet": [
+        artifacts.VAE_SCORES_FILE: [
             ("vae", "reconstruction_error", "reconstruction_error"),
             ("vae", "negative_elbo", "negative_elbo"),
         ],
-        "markov_scores.parquet": [
+        artifacts.MARKOV_SCORES_FILE: [
             ("markov_state_model", "max_transition_surprisal", "max_transition_surprisal")
         ],
     }
@@ -63,10 +64,14 @@ def scored_models(scores_dir: Path, rbm_k_values: list[int]) -> list[ScoredModel
         for model, score, column in columns:
             models.append(
                 ScoredModel(
-                    model, score, table["window_start"], table["split"],
-                    table["usable"].to_numpy(), table[column].to_numpy(np.float64),
+                    model,
+                    score,
+                    table["window_start"],
+                    table["split"],
+                    table["usable"].to_numpy(),
+                    table[column].to_numpy(np.float64),
                 )
-            )  # fmt: skip
+            )
     return models
 
 
@@ -80,9 +85,13 @@ def test_alert_events(
     """Alert events on usable test windows only."""
     in_test = (scored.split == TEST).to_numpy() & scored.usable
     return build_alert_events(
-        scored.window_starts[in_test], scored.scores[in_test], threshold, window_seconds,
-        merge_gap_minutes, min_event_windows,
-    )  # fmt: skip
+        scored.window_starts[in_test],
+        scored.scores[in_test],
+        threshold,
+        window_seconds,
+        merge_gap_minutes,
+        min_event_windows,
+    )
 
 
 def reported_window_range(window: FailureWindow, lead_tolerance_hours: float):
@@ -140,10 +149,12 @@ def evaluate_scored_model(
     )
     rows = []
     for percentile, threshold in thresholds.items():
-        events = test_alert_events(scored, threshold, window_seconds, merge_gap_minutes,
-                                   min_event_windows)  # fmt: skip
-        n_alert_windows = int(alert_mask(np.nan_to_num(scored.scores[usable_test], nan=-np.inf),
-                                         threshold).sum())  # fmt: skip
+        events = test_alert_events(
+            scored, threshold, window_seconds, merge_gap_minutes, min_event_windows
+        )
+        n_alert_windows = int(
+            alert_mask(np.nan_to_num(scored.scores[usable_test], nan=-np.inf), threshold).sum()
+        )
         row = {
             "model": scored.model,
             "score": scored.score,

@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from metroguard.alert_events import build_alert_events
+from metroguard.alerting.alert_events import build_alert_events
 
 MINUTE = 60
 

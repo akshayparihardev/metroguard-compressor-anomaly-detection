@@ -6,12 +6,13 @@ import json
 import numpy as np
 import pandas as pd
 
-from metroguard import markov_state_model as msm
-from metroguard.alert_thresholds import fit_thresholds, freeze_thresholds
-from metroguard.chronological_split import FIT_SPLITS, TEST
+from metroguard import artifact_names as artifacts
+from metroguard.alerting.alert_thresholds import fit_thresholds, freeze_thresholds
 from metroguard.config_loader import load_config
-from metroguard.feature_builder import TIMESTAMP_COLUMN
-from metroguard.raw_data_loader import cache_path, load_readings_cache
+from metroguard.data.chronological_split import FIT_SPLITS, TEST
+from metroguard.data.feature_builder import TIMESTAMP_COLUMN
+from metroguard.data.raw_data_loader import cache_path, load_readings_cache
+from metroguard.models import markov_state_model as msm
 from metroguard.step_run_tracking import (
     config_fingerprint,
     configure_step_logging,
@@ -21,10 +22,6 @@ from metroguard.step_run_tracking import (
 
 STEP_NAME = "step06_fit_markov_states"
 MODEL_NAME = "markov_state_model"
-WINDOW_FEATURES_FILE = "window_features.parquet"
-CUT_POINTS_FILE = "motor_current_state_cut_points.json"
-MATRIX_FILE = "markov_transition_matrix.json"
-SCORES_FILE = "markov_scores.parquet"
 
 
 def main() -> None:
@@ -36,10 +33,10 @@ def main() -> None:
     config = load_config()
     paths, sections = config.paths, config.sections
     log = configure_step_logging(STEP_NAME, paths.logs_dir)
-    features_path = paths.processed_dir / WINDOW_FEATURES_FILE
-    cut_points_path = paths.models_dir / CUT_POINTS_FILE
-    matrix_path = paths.models_dir / MATRIX_FILE
-    scores_path = paths.scores_dir / SCORES_FILE
+    features_path = paths.processed_dir / artifacts.WINDOW_FEATURES_FILE
+    cut_points_path = paths.models_dir / artifacts.MOTOR_CUT_POINTS_FILE
+    matrix_path = paths.models_dir / artifacts.MARKOV_MATRIX_FILE
+    scores_path = paths.scores_dir / artifacts.MARKOV_SCORES_FILE
     inputs = [cache_path(paths.processed_dir), features_path, cut_points_path]
     fingerprint = config_fingerprint(
         {k: sections[k] for k in ("seed", "audit", "split", "windows", "thresholds")}
@@ -71,9 +68,15 @@ def main() -> None:
         matrix = msm.fit_transition_matrix(counts)
         paths.models_dir.mkdir(parents=True, exist_ok=True)
         matrix_path.write_text(
-            json.dumps({"cut_points_amps": cut_points, "counts": counts.tolist(),
-                        "transition_matrix": matrix.tolist()}, indent=2)
-        )  # fmt: skip
+            json.dumps(
+                {
+                    "cut_points_amps": cut_points,
+                    "counts": counts.tolist(),
+                    "transition_matrix": matrix.tolist(),
+                },
+                indent=2,
+            )
+        )
         log.info("Transition counts on fit readings:\n%s", counts)
         log.info("Transition matrix (add-one smoothing):\n%s", np.round(matrix, 5))
 
@@ -86,17 +89,23 @@ def main() -> None:
         calib_scores = calib_scores[~np.isnan(calib_scores)]
         thresholds = fit_thresholds(calib_scores, sections["thresholds"]["percentiles"])
         frozen_at = freeze_thresholds(
-            paths.tables_dir / "thresholds.json", MODEL_NAME, msm.SURPRISAL, thresholds,
+            paths.tables_dir / artifacts.THRESHOLDS_FILE,
+            MODEL_NAME,
+            msm.SURPRISAL,
+            thresholds,
             len(calib_scores),
-        )  # fmt: skip
+        )
         log.info("Frozen %s thresholds %s at %s", MODEL_NAME, thresholds, frozen_at)
 
         output = table.assign(**{msm.SURPRISAL: scores})
         output.loc[is_test, msm.SURPRISAL] = scores[is_test]
         paths.scores_dir.mkdir(parents=True, exist_ok=True)
         output.to_parquet(scores_path, index=False)
-        log.info("Windows without a valid transition (NaN score): %d of %d",
-                 int(np.isnan(scores).sum()), len(scores))  # fmt: skip
+        log.info(
+            "Windows without a valid transition (NaN score): %d of %d",
+            int(np.isnan(scores).sum()),
+            len(scores),
+        )
         log.info("Wrote %s and %s", matrix_path, scores_path)
 
 

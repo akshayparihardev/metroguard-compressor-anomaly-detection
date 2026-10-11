@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from metroguard.feature_builder import (
+from metroguard.data.feature_builder import (
     aggregate_windows,
     binarise_digital,
     discretise,

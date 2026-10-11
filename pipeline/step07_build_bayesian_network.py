@@ -7,16 +7,17 @@ import sys
 import numpy as np
 import pandas as pd
 
-from metroguard import plotting
-from metroguard.chronological_split import CALIB, FIT_SPLITS
-from metroguard.config_loader import load_config
-from metroguard.event_evaluation import (
+from metroguard import artifact_names as artifacts
+from metroguard.alerting.event_evaluation import (
     best_primary_model,
     evaluate_scored_model,
     events_to_explain,
     scored_models,
     test_alert_events,
 )
+from metroguard.config_loader import load_config
+from metroguard.data.chronological_split import CALIB, FIT_SPLITS
+from metroguard.reporting import plotting
 from metroguard.step_run_tracking import (
     config_fingerprint,
     configure_step_logging,
@@ -28,19 +29,10 @@ from metroguard.step_run_tracking import (
 if (exit_code := rerun_with_fixed_hash_seed()) is not None:
     sys.exit(exit_code)
 
-from metroguard import bayesian_network as bn  # noqa: E402
+from metroguard.models import bayesian_network as bn  # noqa: E402
 
 STEP_NAME = "step07_build_bayesian_network"
-STATES_FILE = "window_discrete_states.parquet"
-FEATURES_FILE = "window_features.parquet"
-BIN_EDGES_FILE = "discretisation_bin_edges.json"
 UNUSUAL_SHARE_FACTOR = 2
-SCORE_FILES = (
-    "zscore_baseline_scores.parquet",
-    "rbm_scores.parquet",
-    "vae_scores.parquet",
-    "markov_scores.parquet",
-)
 
 
 def state_counts(nodes: list[str], bin_edges: dict[str, list[float]]) -> dict[str, int]:
@@ -80,8 +72,10 @@ def demonstrations_markdown(model, data, edges) -> str:
     for case in cases:
         given = ", ".join(case["given"]) or "nothing"
         relation = "dependent (d-connected)" if case["d_connected"] else "independent (d-separated)"
-        lines.append(f"- {case['case']}: {case['pair'][0]} and {case['pair'][1]}, given {given}: "
-                     f"**{relation}**")  # fmt: skip
+        lines.append(
+            f"- {case['case']}: {case['pair'][0]} and {case['pair'][1]}, given {given}: "
+            f"**{relation}**"
+        )
     lines += ["", "## d-separation in chain, fork and collider patterns", ""]
     patterns = bn.structure_patterns(model)
     for p in patterns:
@@ -151,19 +145,33 @@ def main() -> None:
     paths, sections = config.paths, config.sections
     bn_config = sections["bayesian_network"]
     log = configure_step_logging(STEP_NAME, paths.logs_dir)
-    inputs = [paths.processed_dir / STATES_FILE, paths.processed_dir / FEATURES_FILE,
-              paths.models_dir / BIN_EDGES_FILE, paths.tables_dir / "thresholds.json",
-              *[paths.scores_dir / f for f in SCORE_FILES]]  # fmt: skip
+    inputs = [
+        paths.processed_dir / artifacts.DISCRETE_STATES_FILE,
+        paths.processed_dir / artifacts.WINDOW_FEATURES_FILE,
+        paths.models_dir / artifacts.BIN_EDGES_FILE,
+        paths.tables_dir / artifacts.THRESHOLDS_FILE,
+        *[paths.scores_dir / f for f in artifacts.SCORE_FILES],
+    ]
     outputs = [
-        paths.tables_dir / "bayesian_network_edges.csv",
-        paths.tables_dir / "bayesian_network_demonstrations.md",
-        paths.tables_dir / "bayesian_network_alert_context.md",
+        paths.tables_dir / artifacts.NETWORK_EDGES_FILE,
+        paths.tables_dir / artifacts.NETWORK_DEMONSTRATIONS_FILE,
+        paths.tables_dir / artifacts.NETWORK_ALERT_CONTEXT_FILE,
         paths.figures_dir / "bayesian_network" / "bayesian_network_dag.png",
     ]
     fingerprint = config_fingerprint(
-        {k: sections[k] for k in ("seed", "split", "windows", "alerts", "evaluation",
-                                  "thresholds", "bayesian_network")}
-    )  # fmt: skip
+        {
+            k: sections[k]
+            for k in (
+                "seed",
+                "split",
+                "windows",
+                "alerts",
+                "evaluation",
+                "thresholds",
+                "bayesian_network",
+            )
+        }
+    )
     if not args.force and is_step_up_to_date(
         STEP_NAME, paths.logs_dir, inputs, outputs, fingerprint
     ):
@@ -179,8 +187,12 @@ def main() -> None:
         usable = table["usable"].to_numpy()
         fit_rows = table["split"].isin(FIT_SPLITS).to_numpy() & usable
         calib_rows = (table["split"] == CALIB).to_numpy() & usable
-        log.info("BN nodes %d; fit windows %d; calib windows %d", len(nodes), fit_rows.sum(),
-                 calib_rows.sum())  # fmt: skip
+        log.info(
+            "BN nodes %d; fit windows %d; calib windows %d",
+            len(nodes),
+            fit_rows.sum(),
+            calib_rows.sum(),
+        )
 
         fit_data = node_states[fit_rows]
         edges = bn.learn_structure(fit_data, bn_config["scoring_method"], bn_config["max_indegree"])
@@ -199,13 +211,19 @@ def main() -> None:
         primary_percentile = sections["thresholds"]["primary_percentile"]
         for scored in models:
             if scored.is_primary:
-                limits = {str(primary_percentile): thresholds[scored.model][scored.score][
-                    "thresholds"][f"{primary_percentile:g}"]}  # fmt: skip
+                limits = {
+                    str(primary_percentile): thresholds[scored.model][scored.score]["thresholds"][
+                        f"{primary_percentile:g}"
+                    ]
+                }
                 rows += evaluate_scored_model(
-                    scored, limits, window_seconds, sections["alerts"]["merge_gap_minutes"],
+                    scored,
+                    limits,
+                    window_seconds,
+                    sections["alerts"]["merge_gap_minutes"],
                     sections["alerts"]["min_event_windows"],
                     sections["evaluation"]["lead_tolerance_hours"],
-                )  # fmt: skip
+                )
         best = best_primary_model(rows, float(primary_percentile))
         best_scored = next(
             m for m in models if (m.model, m.score) == (best["model"], best["score"])
@@ -218,19 +236,26 @@ def main() -> None:
             sections["alerts"]["min_event_windows"],
         )
         explained = events_to_explain(events, bn_config["context_events"])
-        log.info("Best model for context: %s (%s), %d of 4 events detected; explaining %s",
-                 best["model"], best["score"], best["events_detected"],
-                 [e for e, _ in explained])  # fmt: skip
+        log.info(
+            "Best model for context: %s (%s), %d of 4 events detected; explaining %s",
+            best["model"],
+            best["score"],
+            best["events_detected"],
+            [e for e, _ in explained],
+        )
         context = alert_context_markdown(
             model, node_states, table, calib_rows, explained, bn_config["context_percentile"]
         )
-        header = (f"Model used: `{best['model']}` ({best['score']}, {primary_percentile:g}th "
-                  f"percentile threshold). Chosen as the primary-score model detecting the most "
-                  f"reported events on test (ties: fewest unconfirmed alerts/day). This choice "
-                  f"does not change any threshold or model.\n\n")  # fmt: skip
+        header = (
+            f"Model used: `{best['model']}` ({best['score']}, {primary_percentile:g}th "
+            f"percentile threshold). Chosen as the primary-score model detecting the most "
+            f"reported events on test (ties: fewest unconfirmed alerts/day). This choice "
+            f"does not change any threshold or model.\n\n"
+        )
         first_break = context.index("\n\n") + 2
-        outputs[2].write_text(context[:first_break] + header + context[first_break:],
-                              encoding="utf-8")  # fmt: skip
+        outputs[2].write_text(
+            context[:first_break] + header + context[first_break:], encoding="utf-8"
+        )
         log.info("Wrote %s", [p.name for p in outputs])
 
 

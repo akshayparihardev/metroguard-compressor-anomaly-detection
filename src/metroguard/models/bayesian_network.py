@@ -1,6 +1,6 @@
 """Discrete Bayesian network: structure learning, CPDs, queries and alert context."""
 
-from metroguard.pgmpy_import_fallback import install_statsmodels_api_fallback
+from metroguard.models.pgmpy_import_fallback import install_statsmodels_api_fallback
 
 install_statsmodels_api_fallback()
 
@@ -99,14 +99,25 @@ def local_independence_cases(model: DiscreteBayesianNetwork) -> list[dict]:
         if parents and descendants and others:
             other = others[0]
             return [
-                {"case": "node and a parent", "pair": (node, parents[0]), "given": [],
-                 "d_connected": d_connected(model, node, parents[0], [])},
-                {"case": "node and a non-parent non-descendant, given its parents",
-                 "pair": (node, other), "given": parents,
-                 "d_connected": d_connected(model, node, other, parents)},
-                {"case": "node and a descendant", "pair": (node, descendants[0]), "given": [],
-                 "d_connected": d_connected(model, node, descendants[0], [])},
-            ]  # fmt: skip
+                {
+                    "case": "node and a parent",
+                    "pair": (node, parents[0]),
+                    "given": [],
+                    "d_connected": d_connected(model, node, parents[0], []),
+                },
+                {
+                    "case": "node and a non-parent non-descendant, given its parents",
+                    "pair": (node, other),
+                    "given": parents,
+                    "d_connected": d_connected(model, node, other, parents),
+                },
+                {
+                    "case": "node and a descendant",
+                    "pair": (node, descendants[0]),
+                    "given": [],
+                    "d_connected": d_connected(model, node, descendants[0], []),
+                },
+            ]
     return []
 
 
