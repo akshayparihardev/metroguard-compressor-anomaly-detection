@@ -52,12 +52,13 @@ All numbers come from saved outputs (`reports/data_audit_report.md`, `outputs/lo
 - The frozen-value run check is not named in the step 1 spec. It was added because the event 1
   plot showed about 15 h of perfectly constant readings, which directly affects windowing.
 
-**Environment.** Python 3.14.6 (the only interpreter installed). Windows Application Control
-blocked loading torch's `caffe2_nvrtc.dll` (both the CUDA 12.8 wheel in `.venv` and the existing
-system install) and numpy 2.5.4's `mtrand` DLL. numpy 2.4.6 / pandas 2.3.3 / pyarrow 23.0.1 /
-matplotlib 3.10.8 / pgmpy 1.1.2 load fine and are pinned. A Python 3.12 venv would not help,
-because the block is an OS policy, not a Python version issue. **torch is blocked for step 5
-until this is resolved.**
+**Environment.** Python 3.14.6 (the only interpreter installed). Windows Smart App Control
+(on) blocked recently released builds: numpy 2.5.4 (`mtrand` DLL) and torch 2.11
+(`caffe2_nvrtc.dll`, both the venv copy and the system copy). Older, established builds load
+fine. Pinned: numpy 2.4.6, pandas 2.3.3, pyarrow 23.0.1, matplotlib 3.10.8, pgmpy 1.1.2 and
+torch 2.9.1+cu128. Verified: `torch.cuda.is_available()` is True on the NVIDIA GeForce RTX 4050
+Laptop GPU, and a float32 matrix multiply ran on it. Smart App Control was not changed.
+Models will use the GPU (CUDA) for the VAE and, where it speeds training up, the RBM.
 
 ## Possible future work
 
