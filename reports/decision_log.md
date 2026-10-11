@@ -431,6 +431,47 @@ test windows than the 1% they were calibrated to, because February is not repres
 "4 of 4 events detected" is weak evidence because the detection ranges cover only 4.2% of the test period; the
 Markov model was the most selective (3 of 4, 3.65 unconfirmed alerts per day).
 
+## Step 10: read-only static dashboard (deliberate scope extension, 2026-10-11)
+
+**Why this is outside the original scope.** `docs/project_spec.md` and `CLAUDE.md` locked the scope against
+dashboards and UIs. The author explicitly approved a read-only static dashboard for deployment on Vercel. Both
+files were amended to allow a `dashboard/` folder only; nothing else in the scope lock changed. The dashboard
+shows saved outputs. It runs no model, scores nothing, reads no raw CSV and no model weights.
+
+**What was built.**
+- `src/metroguard/dashboard_export.py` and `pipeline/step10_build_dashboard_data.py` (thin wrapper, skips when up
+  to date) turn `reports/tables`, `outputs/scores` (hourly maxima, plus window-level series around each reported
+  window) and `outputs/logs` runtimes into 10 JSON files in `dashboard/data/` (about 1.4 MB; the four event files
+  load only when opened). The audit and Bayesian-network tables are parsed from the generated markdown reports; the
+  parser fails loudly if a report's format changes, so a number can never silently go blank.
+- `dashboard/` (no framework, no build tool, no runtime dependencies): six pages (Overview, Metrics, Scores over
+  time, Bayesian network, Data and training, Claims and limits), shared `assets/styles.css`, `app.js`, `charts.js`
+  (canvas charts), `linemap.js`, one script per page, self-hosted fonts, and `vercel.json`.
+- `tests/test_dashboard_export.py` (8 tests, 43 in total pass) checks the parsers, the hourly downsampling and
+  gap handling, the epoch conversion, strict JSON (no NaN) and the layered network layout.
+
+**Design decisions and reasons** (frontend skills applied: `frontend-design`, `impeccable` Operate mode).
+- *Signature element*: the 213-day record drawn as a metro line (data gaps dashed, reported windows as stations,
+  the end of the training month as a bar) with a ribbon of how much of each day the baseline spends above its
+  threshold. It makes the central finding visible at a glance: the models flag far more windows after the
+  training month than they were calibrated to.
+- *Everything else is a plain data tool*: left rail (top bar on mobile), standard tables, segmented controls,
+  toggle chips, canvas charts with hover tooltip, drag-to-zoom and double-click reset. Light and dark themes
+  follow the OS and can be toggled. One brand colour (teal), red for reported windows, orange for alerts.
+- *No numbers are typed into the pages.* Sentences are assembled from the JSON, so the site cannot drift from the
+  pipeline. The dashboard repeats the report's honest framing: detection numbers are shown beside alert rates,
+  "unconfirmed alerts" instead of "false alarms", no prediction or causal claims, edge directions flagged as
+  arbitrary.
+- *Layered network layout* (parents left of children) replaced a spring layout that piled nodes together.
+- *No figure PNGs were duplicated* into `dashboard/`; charts are drawn from data. Only the generated JSON is
+  committed so that Vercel can serve it without the pipeline outputs.
+- Quality checks run: text contrast at least 4.5:1 in both themes (the orange used only for graphics measures
+  4.29:1 against the 3:1 needed), no horizontal overflow at 375 px, keyboard focus rings, skip link, reduced-motion
+  respected, interactions exercised in a browser (tooltip, zoom, reset, node selection, sorting, toggles).
+
+**Not done.** No screen-reader pass beyond landmarks and labels, no automated visual-regression tests, and the
+site was previewed locally but not yet deployed (the repository has no remote).
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train

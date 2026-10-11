@@ -12,7 +12,7 @@ This file is the single source of truth for the whole project. `docs/phase1_data
 
 Learn the normal behaviour of a real metro-train air compressor from sensor data (MetroPT-3, UCI), score how unusual each later period is with several probabilistic models (z-score baseline, RBM trained with Gibbs sampling + Contrastive Divergence, VAE, optional Markov state model), turn scores into alerts using thresholds fixed on training data only, give each alert probabilistic context with a Bayesian Network, and evaluate alerts against the four company-reported air-leak intervals. The deliverable is reproducible code, figures, a metrics table and an honest report.
 
-**Scope lock.** Build exactly what this spec describes. No extra models, no dashboard, no API, no web app, no external AI services, no extra datasets, no hyperparameter searches beyond the values listed in `config.yaml`. If something outside this spec looks useful, write it under "Possible future work" in the decision log instead of building it.
+**Scope lock.** Build exactly what this spec describes. No extra models, no API, no external AI services, no extra datasets, no hyperparameter searches beyond the values listed in `config.yaml`. The single permitted exception is the read-only static dashboard in `dashboard/` (step 10), approved by the author as a deliberate scope extension: it only displays files the pipeline already produced. If something outside this spec looks useful, write it under "Possible future work" in the decision log instead of building it.
 
 ## 1. Non-negotiable rules (apply in every step)
 
@@ -58,6 +58,7 @@ DL 2 Project/                         # repo root: only what a reader needs firs
 │   ├── zscore_baseline.py            # z-score anomaly scores
 │   ├── restricted_boltzmann_machine.py  # RBM, Gibbs sampling, CD-k, free energy
 │   ├── variational_autoencoder.py    # VAE model, training loop, reconstruction scores
+│   ├── dashboard_export.py           # step 10: shapes saved results into dashboard JSON
 │   ├── markov_state_model.py         # optional motor-current state transitions
 │   ├── bayesian_network.py           # BN structure, CPDs, queries, alert context
 │   ├── alert_thresholds.py           # threshold fitting on calib + freezing to disk
@@ -73,13 +74,15 @@ DL 2 Project/                         # repo root: only what a reader needs firs
 │   ├── step06_fit_markov_states.py   # optional
 │   ├── step07_build_bayesian_network.py
 │   ├── step08_evaluate_alerts.py
-│   └── run_all_steps.py              # runs steps 2–8 in order, skipping up-to-date ones
+│   ├── run_all_steps.py              # runs steps 2–8 in order, skipping up-to-date ones
+│   └── step10_build_dashboard_data.py  # exports saved results to dashboard/data (step 10, extension)
 ├── tests/                            # pytest, fast (< 1 minute total), no raw CSV needed
 │   ├── test_failure_windows.py
 │   ├── test_restricted_boltzmann_machine.py
 │   ├── test_chronological_split.py
 │   ├── test_alert_thresholds.py
 │   └── test_alert_events.py
+├── dashboard/                        # read-only static site (Vercel), step 10 extension; data/ is generated
 ├── outputs/                          # machine artifacts, git-ignored, always regenerable
 │   ├── models/                       # trained weights (.pt / .npz), fitted scaler, bin edges
 │   ├── scores/                       # per-window anomaly scores per model (parquet)
@@ -200,6 +203,9 @@ For each model (baseline, RBM k = 1/5/10, VAE, Markov if present), on `test` onl
 | Alert-window fraction | share of test windows flagged |
 
 Also: sensitivity table for threshold percentile 99 vs 99.5. Outputs: `reports/tables/metrics.csv`, `reports/tables/metrics.md`, figures in `reports/figures/evaluation/` (score vs time with threshold line and shaded failure windows, per-event zooms, CD-k comparison).
+
+### Step 10 — Static dashboard (scope extension, `step10_build_dashboard_data.py`)
+Read-only static site in `dashboard/` for Vercel. The build script copies or reshapes **only** files the pipeline already produced (`reports/tables`, `outputs/scores` downsampled to hourly maxima plus window-level series around the four events, `outputs/logs` runtimes) into `dashboard/data/`. No raw CSV, no model weights, no retraining. Every number on a page comes from that data. Pages: overview, metrics (99 vs 99.5), scores over time with failure windows and per-event zoom, Bayesian network, data and training evidence, and a claims-and-limits panel.
 
 ### Step 9 — Final report and README
 `reports/final_report.md` sections:

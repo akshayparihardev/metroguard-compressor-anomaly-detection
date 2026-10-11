@@ -52,6 +52,7 @@ python pipeline/step06_fit_markov_states.py         # Markov chain over motor-cu
 python pipeline/step07_build_bayesian_network.py    # Bayesian network, demonstrations, alert context
 python pipeline/step08_evaluate_alerts.py           # event-level metrics and evaluation figures
 python pipeline/run_all_steps.py                    # steps 2 to 8 in order
+python pipeline/step10_build_dashboard_data.py      # export saved results for the dashboard (step 10)
 ```
 
 Every step skips itself when its outputs are newer than its inputs and its configuration is unchanged; add
@@ -67,7 +68,26 @@ Every step skips itself when its outputs are newer than its inputs and its confi
 | Training curves, evaluation figures, network DAG | `reports/figures/rbm/`, `vae/`, `evaluation/`, `bayesian_network/` |
 | Decisions and reasons, step by step | `reports/decision_log.md` |
 | Final report | `reports/final_report.md` |
+| Dashboard data (generated, committed so Vercel can serve it) | `dashboard/data/` |
 | Trained models, scores, logs (not committed) | `outputs/models/`, `outputs/scores/`, `outputs/logs/` |
+
+## Dashboard (read-only, static)
+
+`dashboard/` is a plain HTML, CSS and JavaScript site that displays results the pipeline already saved. It
+runs no model, reads no raw data and has no build step. `step10_build_dashboard_data.py` writes the small JSON
+files in `dashboard/data/` (hourly score maxima, window-level scores around the four events, metrics,
+training curves, audit tables, network structure); every number on a page comes from them.
+
+Preview locally:
+
+```
+python -m http.server 8000 --directory dashboard
+```
+
+then open http://localhost:8000. Deploy on Vercel: push the repository to GitHub, import it in Vercel, set the
+**Root Directory** to `dashboard`, framework preset **Other**, and leave the build and output settings empty
+(`dashboard/vercel.json` already sets clean URLs and cache headers). Fonts (Schibsted Grotesk, JetBrains Mono)
+are self-hosted under the SIL Open Font License; see `dashboard/assets/fonts/LICENSE.txt`.
 
 ## Tests and style
 
