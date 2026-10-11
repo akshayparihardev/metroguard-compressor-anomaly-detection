@@ -44,7 +44,7 @@ All numbers come from saved outputs (`reports/data_audit_report.md`, `outputs/lo
   straight line.
 
 **Additions beyond the original step 1 layout (please confirm at the checkpoint).**
-- `src/metroguard/raw_data_audit.py`: the audit measurements and report rendering. Without it,
+- `src/metroguard/data/raw_data_audit.py`: the audit measurements and report rendering. Without it,
   this logic would sit inside the pipeline script, which spec 3.1 says must stay thin.
 - `config.yaml` gained an `audit:` section (gap multiplier, long-gap hours, near-constant
   fraction, event context, display resampling, frozen-run minimum) and `paths.reports_dir`.
@@ -103,7 +103,7 @@ on `fit` windows only. Outputs in `data/processed/`: `window_features.parquet`,
 - *No interpolation* across gaps: windows exist only where readings exist.
 - *Motor state per window* uses the window-mean motor current. Step 6 may use raw readings for
   transitions inside windows, as the spec says; decided there.
-- *Added `tests/test_feature_builder.py`* (not in the spec's layout list) to test windowing,
+- *Added `tests/data/test_feature_builder.py`* (not in the spec's layout list) to test windowing,
   fit-only bins and the standardiser. 17 tests pass in total.
 
 ## Step 03: z-score baseline (2026-10-11)
@@ -130,11 +130,11 @@ on `fit` windows only. Outputs in `data/processed/`: `window_features.parquet`,
 - *Alert rule*: score strictly above the threshold (`alert_thresholds.alert_mask`).
 - *The baseline uses only the 7 analog window means*, as the spec says; the std and digital
   features are for the VAE and RBM.
-- Tests added in `tests/test_alert_thresholds.py` (22 tests pass in total).
+- Tests added in `tests/alerting/test_alert_thresholds.py` (22 tests pass in total).
 
 ## Step 04: RBM with Gibbs sampling and CD-k (2026-10-11)
 
-**What was done.** `src/metroguard/restricted_boltzmann_machine.py` implements the Bernoulli RBM,
+**What was done.** `src/metroguard/models/restricted_boltzmann_machine.py` implements the Bernoulli RBM,
 Gibbs sampling, CD-k and free energy ourselves with PyTorch tensors (no packaged RBM).
 `pipeline/step04_train_rbm.py` trained three models (k = 1, 5, 10; same seed 42, 32 hidden units,
 30 epochs, batch 256, lr 0.01, momentum 0.5, weight decay 1e-4) on `fit_train` (25,561 windows) with
@@ -166,7 +166,7 @@ Frozen thresholds on 7,100 calib windows (free energy, `reports/tables/threshold
 - *Negative free energies are expected*: F(v) = -a^T v - sum softplus(.) is not normalised, so only
   differences between windows matter. Higher = less typical.
 
-**Tests** (`tests/test_restricted_boltzmann_machine.py`, 7 tests, 29 pass in total): F(v) equals
+**Tests** (`tests/models/test_restricted_boltzmann_machine.py`, 7 tests, 29 pass in total): F(v) equals
 the brute-force -log sum_h exp(-E(v,h)) on a 4-visible, 3-hidden RBM for all 16 visible vectors;
 free energy stays finite for large weights; conditional probabilities have the right shapes and lie
 in (0, 1); samples are binary; the CD gradient has the expected sign and size on a zero-initialised
@@ -205,7 +205,7 @@ pattern.
 
 ## Step 05: VAE (2026-10-11)
 
-**What was done.** `src/metroguard/variational_autoencoder.py` (MLP encoder 18 -> 64 -> 32 -> (mu, log
+**What was done.** `src/metroguard/models/variational_autoencoder.py` (MLP encoder 18 -> 64 -> 32 -> (mu, log
 sigma^2) with latent 6, reparameterisation, mirrored decoder) and `pipeline/step05_train_vae.py` trained on
 `fit_train` (25,561 windows, 18 standardised features) on the **GPU (CUDA, RTX 4050)**, 44 s. Adam,
 lr 0.001, batch 256, beta 1.0, up to 50 epochs, early stopping patience 5 on `fit_validation` loss
@@ -244,7 +244,7 @@ lr 0.001, batch 256, beta 1.0, up to 50 epochs, early stopping patience 5 on `fi
 **Was it supported?** Yes. The step 1 audit found three distinct motor-current states (about 0.05, 3.75
 and 5.95 A), and step 2 re-derived the cut points from `fit` readings only: 1.85 A and 4.35 A.
 
-**What was done.** `src/metroguard/markov_state_model.py` and `pipeline/step06_fit_markov_states.py`
+**What was done.** `src/metroguard/models/markov_state_model.py` and `pipeline/step06_fit_markov_states.py`
 (0.6 s, CPU/NumPy; no GPU needed) assigned a state to every raw reading, counted state-to-state
 steps on readings inside usable `fit` windows, and estimated the transition matrix with add-one
 smoothing. Score per transition = -log P(s_t | s_{t-1}); window score = max over the transitions that
@@ -275,7 +275,7 @@ end in the window. Outputs: `outputs/models/markov_transition_matrix.json`,
 
 ## Step 07: Bayesian network (2026-10-11)
 
-**What was done.** `src/metroguard/bayesian_network.py` and `pipeline/step07_build_bayesian_network.py`
+**What was done.** `src/metroguard/models/bayesian_network.py` and `pipeline/step07_build_bayesian_network.py`
 (2.1 s, CPU) learned a discrete BN with pgmpy 1.1.2 on 28,401 usable `fit` windows: Hill-Climb search with
 the BIC score (`bic-d`, max in-degree 3), then CPDs by Bayesian estimation (BDeu, equivalent sample size 10).
 Nodes (11, from `config.yaml` `bayesian_network.nodes`): the 7 analog window-mean states (3 quantile bins)
@@ -324,7 +324,7 @@ the analog states were not unusual given their blankets. Wording is "unusual / a
 - *Order*: `alert_events.py` and `event_evaluation.py` were written during step 7 (earlier than step 8)
   because the "best model" for the case study needs event-level detection counts. Step 8 reuses them.
 - `pgmpy` 1.1.2 needs `statsmodels.api`, whose time-series DLLs Windows Smart App Control blocks here.
-  `src/metroguard/pgmpy_import_fallback.py` registers a minimal stand-in (only the three regression classes
+  `src/metroguard/models/pgmpy_import_fallback.py` registers a minimal stand-in (only the three regression classes
   pgmpy asks for) if, and only if, the real import fails. The discrete BN code paths never use it. Also
   pinned older, loadable builds: scipy 1.17.1 (1.18.1 was blocked) and statsmodels 0.14.6.
 - pgmpy API drift handled: `pgmpy.causal_discovery.HillClimbSearch` with `return_type="dag"`, categorical
@@ -403,8 +403,8 @@ total); it reproduced `metrics.csv` and every threshold exactly.
 
 **Definition of done (spec section 6).**
 - Layout matches 2.1, names follow 2.2, no stray or duplicate files: **passed, with documented additions**
-  not in the 2.1 tree: `src/metroguard/raw_data_audit.py`, `src/metroguard/pgmpy_import_fallback.py`,
-  `tests/test_feature_builder.py`, and extra tables in `reports/tables/` (training histories and Bayesian
+  not in the 2.1 tree: `src/metroguard/data/raw_data_audit.py`, `src/metroguard/models/pgmpy_import_fallback.py`,
+  `tests/data/test_feature_builder.py`, and extra tables in `reports/tables/` (training histories and Bayesian
   network tables). No forbidden names (`utils`, `helpers`, `misc`, `temp`, `v2`, ...) in tracked files.
 - All steps run in order from the raw CSV: **passed on this checkout** (`run_all_steps.py --force`
   after step 1). **Not tested** from a literal fresh clone with a new virtual environment.
@@ -439,7 +439,7 @@ files were amended to allow a `dashboard/` folder only; nothing else in the scop
 shows saved outputs. It runs no model, scores nothing, reads no raw CSV and no model weights.
 
 **What was built.**
-- `src/metroguard/dashboard_export.py` and `pipeline/step10_build_dashboard_data.py` (thin wrapper, skips when up
+- `src/metroguard/reporting/dashboard_export.py` and `pipeline/step10_build_dashboard_data.py` (thin wrapper, skips when up
   to date) turn `reports/tables`, `outputs/scores` (hourly maxima, plus window-level series around each reported
   window) and `outputs/logs` runtimes into 10 JSON files in `dashboard/data/` (about 1.4 MB; the four event files
   load only when opened). The audit and Bayesian-network tables are parsed from the generated markdown reports; the
@@ -447,7 +447,7 @@ shows saved outputs. It runs no model, scores nothing, reads no raw CSV and no m
 - `dashboard/` (no framework, no build tool, no runtime dependencies): six pages (Overview, Metrics, Scores over
   time, Bayesian network, Data and training, Claims and limits), shared `assets/styles.css`, `app.js`, `charts.js`
   (canvas charts), `linemap.js`, one script per page, self-hosted fonts, and `vercel.json`.
-- `tests/test_dashboard_export.py` (8 tests, 43 in total pass) checks the parsers, the hourly downsampling and
+- `tests/reporting/test_dashboard_export.py` (8 tests, 43 in total pass) checks the parsers, the hourly downsampling and
   gap handling, the epoch conversion, strict JSON (no NaN) and the layered network layout.
 
 **Design decisions and reasons** (frontend skills applied: `frontend-design`, `impeccable` Operate mode).
@@ -498,6 +498,39 @@ tap-to-inspect on the charts; very large screens get a wider content column and 
 
 **Not done.** No screen-reader pass beyond landmarks and labels, no automated visual-regression tests, and the
 site was previewed locally but not yet deployed (the repository has no remote).
+
+## Repository clean-up (2026-10-11)
+
+**Goal.** Leave the repository easy to open and understand, as a senior maintainer would keep it. A scripted
+audit came first (tracked files by folder, unused definitions, duplicated constants), then the changes below.
+
+**What changed and why.**
+- *Grouped the library by role.* Nineteen modules sat in one flat folder. They now live in four packages:
+  `data/` (loading, audit, split, features), `models/` (baseline, RBM, VAE, Markov chain, Bayesian network),
+  `alerting/` (thresholds, alert events, evaluation) and `reporting/` (figures, dashboard export), with the three
+  foundation modules (`config_loader`, `artifact_names`, `step_run_tracking`) at the package root. Tests mirror the
+  same grouping. Files were moved with `git mv`, so their history is kept, and the imports were rewritten by script.
+  This amends the flat layout in spec section 2.1 at the author's request ("group similar files"); the spec layout
+  now matches the repository.
+- *One source of truth for file names.* `window_features.parquet` alone was declared in five scripts, and the four
+  score files in three. They are now defined once in `src/metroguard/artifact_names.py`, so a writer and a reader
+  can no longer drift apart.
+- *Removed* one dead constant (`EXPECTED_DIGITAL_COUNT`) and all 41 `# fmt: skip` markers; the formatter now
+  decides layout everywhere.
+- *Tooling*: `.gitattributes` (LF in the repository, binary and generated files marked), `.editorconfig`,
+  `requirements.txt` split into runtime and `requirements-dev.txt`, and a tighter `.gitignore` (`.claude/`,
+  `.vercel/`, logs, OS files).
+- *Docs*: the README was rewritten (result summary, layout, quick start, pipeline table with the library code behind
+  each step), `dashboard/README.md` was added, and module paths in the spec, reports and prompts were updated.
+
+**Verification.** 43 tests pass and `ruff check` / `ruff format --check` are clean. The whole pipeline (audit,
+steps 2 to 8, dashboard export) was re-run from scratch after the refactor: `metrics.csv` and every threshold value
+are identical to the committed ones, and four of the five dashboard data files are byte-identical; only run
+timestamps and runtimes differ, so the committed timestamped files were kept.
+
+**Left for the author to decide** (not changed without asking): a `LICENSE` for the code (the data is CC BY 4.0),
+whether `docs/claude_code_prompts.md` and the explainer PDF belong in a public repository, and whether to add a
+GitHub Actions workflow (tests and ruff on every push).
 
 ## Possible future work
 

@@ -1,7 +1,7 @@
-# Pinned versions verified on Windows 11, Python 3.14, RTX 4050 (CUDA 12.8).
+# Pinned runtime dependencies (Python 3.14, Windows 11, CUDA 12.8).
 # Install torch first: pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128
-# Newer builds of numpy (2.5.x), scipy (1.18.x) and torch (2.11) were blocked by Windows Smart App
-# Control on the development machine, so these older versions are pinned (see reports/decision_log.md).
+# Older builds of numpy, scipy and torch are pinned because Windows Smart App Control blocked
+# newer ones on the development machine (see reports/decision_log.md).
 numpy==2.4.6
 pandas==2.3.3
 pyarrow==23.0.1
@@ -14,5 +14,3 @@ networkx==3.6.1
 pgmpy==1.1.2
 tabulate==0.10.0
 torch==2.9.1
-pytest==9.1.1
-ruff==0.17.0

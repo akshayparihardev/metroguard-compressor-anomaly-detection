@@ -33,7 +33,7 @@ Treat these as reported event windows, not dense row-by-row ground-truth labels.
 
 ### 1. Set up the project skeleton
 
-Create the repository layout, naming rules, `.gitignore`, `pyproject.toml`, `requirements.txt` and `config.yaml` exactly as described in `docs/project_spec.md` sections 2, 3 and 5. For step 1 only these files need real content: `pipeline/step01_audit_raw_data.py`, `src/metroguard/config_loader.py`, `src/metroguard/raw_data_loader.py`, `src/metroguard/failure_windows.py`, `src/metroguard/plotting.py`. Do not create empty placeholder modules for later steps.
+Create the repository layout, naming rules, `.gitignore`, `pyproject.toml`, `requirements.txt` and `config.yaml` exactly as described in `docs/project_spec.md` sections 2, 3 and 5. For step 1 only these files need real content: `pipeline/step01_audit_raw_data.py`, `src/metroguard/config_loader.py`, `src/metroguard/data/raw_data_loader.py`, `src/metroguard/data/failure_windows.py`, `src/metroguard/reporting/plotting.py`. Do not create empty placeholder modules for later steps.
 
 Keep the raw CSV out of Git. Use Python with pandas, numpy, matplotlib and pyarrow. Prefer straightforward, reproducible code over extra frameworks.
 

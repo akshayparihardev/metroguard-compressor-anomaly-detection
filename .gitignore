@@ -10,3 +10,10 @@ __pycache__/
 .ruff_cache/
 *.pt
 .ipynb_checkpoints/
+
+# Local tooling and OS files
+.claude/
+.vercel/
+*.log
+.DS_Store
+Thumbs.db

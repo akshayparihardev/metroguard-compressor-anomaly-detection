@@ -1,97 +1,101 @@
 # MetroGuard
 
-Anomaly detection in real metro air-compressor telemetry (MetroPT-3, UCI). Models learn "normal" behaviour
-from the first month and score how unusual later periods look: a z-score baseline, an RBM trained with Gibbs
-sampling and contrastive divergence (CD-k, implemented here, no packaged RBM), a VAE and a Markov state model.
-Alerts use thresholds fixed on training data only, a Bayesian network gives probabilistic context for alerts,
-and results are evaluated at event level against four operator-reported air-leak intervals. Deep Learning II
-(CDT7001) course project; exploratory, with no failure-prediction and no causal claims.
-Start with `reports/final_report.md`; the master specification is `docs/project_spec.md`.
+Anomaly detection on real metro air-compressor telemetry (MetroPT-3, UCI). Five approaches learn what
+"normal" looks like from the first month of data and score how unusual later periods look: a z-score
+baseline, an RBM trained with Gibbs sampling and contrastive divergence (written from scratch, no packaged
+RBM), a VAE, a Markov chain over motor-current states, and a Bayesian network that explains alerts. Results
+are evaluated at event level against four operator-reported air-leak intervals.
+
+Course project for Deep Learning II (CDT7001). Exploratory: four reported events on one machine, and no
+claim of failure prediction or causation.
+
+## What it found
+
+- Thresholds fitted on the training month flag only about 1% of that month, but **10% to 21% of later windows**
+  for the baseline, RBM and VAE, because the training month is not representative of the rest of the record.
+- All of those models "detect" the four reported windows, but the detection ranges cover only 4.2% of the test
+  period, so that is weak evidence. **No learned model beat the z-score baseline.**
+- The Markov chain is the most selective (0.44% of windows flagged) and detects three of four events.
+
+Details and numbers: [`reports/final_report.md`](reports/final_report.md). Every decision and its reason:
+[`reports/decision_log.md`](reports/decision_log.md). A read-only dashboard of the results lives in
+[`dashboard/`](dashboard/README.md).
 
 ## Repository layout
 
 ```
-config.yaml           every tunable value          pyproject.toml, requirements.txt   packaging, pinned versions
-src/metroguard/       reusable library code        pipeline/                          one script per step
-tests/                pytest (no raw CSV needed)   docs/                              specs and explanations
-data/raw/             official CSV (git-ignored)   data/processed/                    parquet/npz caches (git-ignored)
-outputs/              models, scores, logs (git-ignored, regenerable)
-reports/              audit report, decision log, final report, tables/, figures/
+config.yaml                every tunable value (seed, window size, model settings, thresholds)
+src/metroguard/            library code, grouped by role
+  data/                    loading, auditing, splitting and featurising the raw readings
+  models/                  baseline, RBM, VAE, Markov chain, Bayesian network
+  alerting/                thresholds, alert events, event-level evaluation
+  reporting/               figures and the dashboard export
+  config_loader.py  artifact_names.py  step_run_tracking.py
+pipeline/                  one thin script per step (step01 ... step10) and run_all_steps.py
+tests/                     pytest, mirrors src/metroguard (no raw data needed)
+dashboard/                 read-only static site, deployed on Vercel
+reports/                   audit report, decision log, final report, tables/, figures/
+docs/                      project specification and explanations
+data/  outputs/            raw and cached data, models, scores, logs (git-ignored, regenerable)
 ```
 
-## Setup (Windows, Python 3.14)
+## Quick start
+
+Requires Python 3.14. The RBM and VAE use the GPU when PyTorch can see one, otherwise the CPU.
 
 ```
 py -3.14 -m venv .venv
 .venv\Scripts\activate
 pip install torch==2.9.1 --index-url https://download.pytorch.org/whl/cu128
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 pip install -e .
 ```
 
-The CUDA build of torch is used when a GPU is visible (the RBM and VAE ran on an RTX 4050); otherwise the CPU
-is used. Versions are pinned to ones that load on the development machine: Windows Smart App Control blocked
-newer builds of numpy, scipy and torch (see `reports/decision_log.md`).
-
-## Data
-
-Download `MetroPT3(AirCompressor).csv` from https://archive.ics.uci.edu/dataset/791/metropt+3+dataset and place
-it in `data/raw/`. The scripts stop with a clear message if it is missing; no substitute data is ever used.
-
-Attribution (CC BY 4.0): MetroPT-3 Dataset, UCI Machine Learning Repository, https://doi.org/10.24432/C5VW3R.
-
-## Run
+Download `MetroPT3(AirCompressor).csv` from the
+[UCI repository](https://archive.ics.uci.edu/dataset/791/metropt+3+dataset) into `data/raw/`, then:
 
 ```
-python pipeline/step01_audit_raw_data.py            # audit, parquet cache, reports/data_audit_report.md
-python pipeline/step02_build_features.py            # 60 s windows, chronological split, fit-only transforms
-python pipeline/step03_score_zscore_baseline.py     # baseline scores, thresholds frozen from calib
-python pipeline/step04_train_rbm.py                 # RBM, CD-k = 1, 5, 10 (GPU)
-python pipeline/step05_train_vae.py                 # VAE with early stopping on fit_validation (GPU)
-python pipeline/step06_fit_markov_states.py         # Markov chain over motor-current states
-python pipeline/step07_build_bayesian_network.py    # Bayesian network, demonstrations, alert context
-python pipeline/step08_evaluate_alerts.py           # event-level metrics and evaluation figures
-python pipeline/run_all_steps.py                    # steps 2 to 8 in order
-python pipeline/step10_build_dashboard_data.py      # export saved results for the dashboard (step 10)
+python pipeline/step01_audit_raw_data.py
+python pipeline/run_all_steps.py
 ```
 
-Every step skips itself when its outputs are newer than its inputs and its configuration is unchanged; add
-`--force` to recompute. Run time per step is logged in `outputs/logs/`.
+Both skip work whose outputs are up to date; add `--force` to recompute. On the author's machine the audit
+takes about 55 s and steps 2 to 8 about 2 minutes.
 
-## Where results go
+## Pipeline
 
-| What | Where |
-|---|---|
-| Audit report and figures | `reports/data_audit_report.md`, `reports/figures/data_audit/` |
-| Frozen thresholds | `reports/tables/thresholds.json` |
-| Metrics | `reports/tables/metrics.csv`, `reports/tables/metrics.md` |
-| Training curves, evaluation figures, network DAG | `reports/figures/rbm/`, `vae/`, `evaluation/`, `bayesian_network/` |
-| Decisions and reasons, step by step | `reports/decision_log.md` |
-| Final report | `reports/final_report.md` |
-| Dashboard data (generated, committed so Vercel can serve it) | `dashboard/data/` |
-| Trained models, scores, logs (not committed) | `outputs/models/`, `outputs/scores/`, `outputs/logs/` |
+| Step | Script | What it does | Main outputs |
+|---|---|---|---|
+| 1 | `step01_audit_raw_data.py` | Audits the raw file (cadence, gaps, digital signals, event windows, motor states) | `reports/data_audit_report.md`, parquet cache |
+| 2 | `step02_build_features.py` | 60 s windows, chronological split, fit-only scaler, bins and state cut points | `data/processed/`, `outputs/models/` |
+| 3 | `step03_score_zscore_baseline.py` | Z-score baseline; thresholds frozen from calib | `outputs/scores/`, `reports/tables/thresholds.json` |
+| 4 | `step04_train_rbm.py` | RBM with CD-k for k = 1, 5, 10 | scores, training curves |
+| 5 | `step05_train_vae.py` | VAE with early stopping on a validation slice | scores, training curves |
+| 6 | `step06_fit_markov_states.py` | Markov chain over motor-current states | scores, transition matrix |
+| 7 | `step07_build_bayesian_network.py` | Learns the network, runs the syllabus demos, explains two alerts | `reports/tables/`, DAG figure |
+| 8 | `step08_evaluate_alerts.py` | Event-level metrics and evaluation figures | `reports/tables/metrics.*` |
+| 9 | (written report) | `reports/final_report.md` | |
+| 10 | `step10_build_dashboard_data.py` | Exports saved results for the dashboard | `dashboard/data/` |
 
-## Dashboard (read-only, static)
+Library code for each step lives in `src/metroguard/`; the scripts only parse arguments, call it and save
+outputs. Names of the files the steps pass to each other are defined once, in `artifact_names.py`.
 
-`dashboard/` is a plain HTML, CSS and JavaScript site that displays results the pipeline already saved. It
-runs no model, reads no raw data and has no build step. `step10_build_dashboard_data.py` writes the small JSON
-files in `dashboard/data/` (hourly score maxima, window-level scores around the four events, metrics,
-training curves, audit tables, network structure); every number on a page comes from them.
-
-Preview locally:
+## Development
 
 ```
-python -m http.server 8000 --directory dashboard
-```
-
-then open http://localhost:8000. Deploy on Vercel: push the repository to GitHub, import it in Vercel, set the
-**Root Directory** to `dashboard`, framework preset **Other**, and leave the build and output settings empty
-(`dashboard/vercel.json` already sets clean URLs and cache headers). Fonts (Schibsted Grotesk, JetBrains Mono)
-are self-hosted under the SIL Open Font License; see `dashboard/assets/fonts/LICENSE.txt`.
-
-## Tests and style
-
-```
-pytest
+pytest                              # fast, needs no raw data
 ruff check . && ruff format --check .
 ```
+
+- **Rules:** [`CLAUDE.md`](CLAUDE.md) holds the working rules (real data only, chronological split, nothing fitted
+  on test data, thresholds frozen before test scoring, honest wording) and
+  [`docs/project_spec.md`](docs/project_spec.md) is the single source of truth.
+- **Reproducibility:** fixed seed in `config.yaml`; step 7 pins `PYTHONHASHSEED` because pgmpy's structure
+  search breaks ties in set order.
+- **Windows note:** older builds of numpy, scipy and torch are pinned because Windows Smart App Control blocked
+  newer ones; `models/pgmpy_import_fallback.py` covers one blocked statsmodels import. See the decision log.
+
+## Data and attribution
+
+MetroPT-3 Dataset, UCI Machine Learning Repository, https://doi.org/10.24432/C5VW3R, licensed CC BY 4.0.
+The raw file is not included in this repository.

@@ -1,0 +1,4 @@
+# Development tools: tests and linting.
+-r requirements.txt
+pytest==9.1.1
+ruff==0.17.0

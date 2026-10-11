@@ -76,7 +76,7 @@ and in test. Do not evaluate against failure windows yet. Run pytest and ruff, c
 ```
 Implement step 4 (RBM) from docs/project_spec.md. Write the RBM ourselves: energy,
 free energy (stable softplus), p(h|v), p(v|h), Gibbs step, CD-k update.
-First write tests/test_restricted_boltzmann_machine.py with the brute-force free-energy
+First write tests/models/test_restricted_boltzmann_machine.py with the brute-force free-energy
 check on a 4-visible, 3-hidden RBM and make it pass before training on real data.
 Then train k = 1, 5, 10 with the config values, save weights to outputs/models/,
 training-curve figures to reports/figures/rbm/, free-energy scores for calib and test

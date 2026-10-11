@@ -32,67 +32,73 @@ Learn the normal behaviour of a real metro-train air compressor from sensor data
 ### 2.1 Layout
 
 ```
-DL 2 Project/                         # repo root: only what a reader needs first
-├── README.md                         # what the project is, setup, how to run each step
-├── CLAUDE.md                         # working rules for coding sessions
-├── config.yaml                       # every tunable value
-├── pyproject.toml                    # package metadata, tool config (ruff, pytest)
-├── requirements.txt                  # pinned dependency versions
-├── .gitignore
-├── docs/                             # specs and explanations (written by us, not generated)
-│   ├── project_spec.md               # this file
-│   ├── phase1_data_audit_spec.md     # detailed spec for step 1
-│   ├── claude_code_prompts.md        # copy-paste prompts for each step (for the human)
+DL 2 Project/                              # repo root: only what a reader needs first
+├── README.md                              # what the project is, setup, how to run each step
+├── CLAUDE.md                              # working rules for coding sessions
+├── config.yaml                            # every tunable value
+├── pyproject.toml                         # package metadata, tool config (ruff, pytest)
+├── requirements.txt                       # pinned runtime dependencies
+├── requirements-dev.txt                   # adds pytest and ruff
+├── .gitignore  .gitattributes  .editorconfig
+├── docs/                                  # specs and explanations (written by us, not generated)
+│   ├── project_spec.md                    # this file
+│   ├── phase1_data_audit_spec.md          # detailed spec for step 1
+│   ├── claude_code_prompts.md             # copy-paste prompts for each step (for the human)
 │   └── MetroGuard_Complete_Project_Explained_Updated.pdf
-├── data/                             # git-ignored except .gitkeep files
-│   ├── raw/                          # official CSV, never modified
-│   └── processed/                    # cached parquet / npz built from raw
-├── src/metroguard/                   # reusable library code, no top-level execution
-│   ├── __init__.py
-│   ├── config_loader.py              # reads config.yaml into a typed object
-│   ├── step_run_tracking.py          # skip-if-up-to-date check + per-step runtime logging
-│   ├── raw_data_loader.py            # reads the CSV once, parses timestamps, caches parquet
-│   ├── failure_windows.py            # the four reported intervals + overlap helpers
-│   ├── chronological_split.py        # fit / calib / test split by time
-│   ├── feature_builder.py            # windowing, scaling, discretisation, binarisation
-│   ├── zscore_baseline.py            # z-score anomaly scores
-│   ├── restricted_boltzmann_machine.py  # RBM, Gibbs sampling, CD-k, free energy
-│   ├── variational_autoencoder.py    # VAE model, training loop, reconstruction scores
-│   ├── dashboard_export.py           # step 10: shapes saved results into dashboard JSON
-│   ├── markov_state_model.py         # optional motor-current state transitions
-│   ├── bayesian_network.py           # BN structure, CPDs, queries, alert context
-│   ├── alert_thresholds.py           # threshold fitting on calib + freezing to disk
-│   ├── alert_events.py               # score -> alert -> merged alert events
-│   ├── event_evaluation.py           # event-level metrics against reported windows
-│   └── plotting.py                   # all figure functions, consistent style
-├── pipeline/                         # one runnable script per step, thin wrappers around src/
+├── data/                                  # git-ignored except .gitkeep files
+│   ├── raw/                               # official CSV, never modified
+│   └── processed/                         # cached parquet / npz built from raw
+├── src/metroguard/                        # reusable library code, no top-level execution
+│   ├── config_loader.py                   # reads config.yaml into a typed object
+│   ├── artifact_names.py                  # file names the steps pass to each other (one source of truth)
+│   ├── step_run_tracking.py               # skip-if-up-to-date check, runtime logging, fixed hash seed
+│   ├── data/                              # loading, auditing, splitting, featurising
+│   │   ├── raw_data_loader.py             # reads the CSV once, parses timestamps, caches parquet
+│   │   ├── raw_data_audit.py              # step 1 measurements and audit report rendering
+│   │   ├── failure_windows.py             # the four reported intervals + overlap helpers
+│   │   ├── chronological_split.py         # fit / fit_validation / calib / test split by time
+│   │   └── feature_builder.py             # windowing, scaling, discretisation, binarisation
+│   ├── models/                            # the anomaly models
+│   │   ├── zscore_baseline.py             # z-score anomaly scores
+│   │   ├── restricted_boltzmann_machine.py  # RBM, Gibbs sampling, CD-k, free energy
+│   │   ├── variational_autoencoder.py     # VAE model, training loop, reconstruction scores
+│   │   ├── markov_state_model.py          # motor-current state transitions
+│   │   ├── bayesian_network.py            # BN structure, CPDs, queries, alert context
+│   │   └── pgmpy_import_fallback.py       # lets pgmpy import where Windows blocks a statsmodels DLL
+│   ├── alerting/                          # scores -> thresholds -> alert events -> metrics
+│   │   ├── alert_thresholds.py            # threshold fitting on calib + freezing to disk
+│   │   ├── alert_events.py                # score -> alert -> merged alert events
+│   │   └── event_evaluation.py            # event-level metrics against reported windows
+│   └── reporting/                         # outputs for people
+│       ├── plotting.py                    # all figure functions, consistent style
+│       └── dashboard_export.py            # step 10: shapes saved results into dashboard JSON
+├── pipeline/                              # one runnable script per step, thin wrappers around src/
 │   ├── step01_audit_raw_data.py
 │   ├── step02_build_features.py
 │   ├── step03_score_zscore_baseline.py
 │   ├── step04_train_rbm.py
 │   ├── step05_train_vae.py
-│   ├── step06_fit_markov_states.py   # optional
+│   ├── step06_fit_markov_states.py
 │   ├── step07_build_bayesian_network.py
-│   ├── step08_evaluate_alerts.py
-│   ├── run_all_steps.py              # runs steps 2–8 in order, skipping up-to-date ones
-│   └── step10_build_dashboard_data.py  # exports saved results to dashboard/data (step 10, extension)
-├── tests/                            # pytest, fast (< 1 minute total), no raw CSV needed
-│   ├── test_failure_windows.py
-│   ├── test_restricted_boltzmann_machine.py
-│   ├── test_chronological_split.py
-│   ├── test_alert_thresholds.py
-│   └── test_alert_events.py
-├── dashboard/                        # read-only static site (Vercel), step 10 extension; data/ is generated
-├── outputs/                          # machine artifacts, git-ignored, always regenerable
-│   ├── models/                       # trained weights (.pt / .npz), fitted scaler, bin edges
-│   ├── scores/                       # per-window anomaly scores per model (parquet)
-│   └── logs/                         # per-step run logs incl. runtime
-└── reports/                          # human-readable results, committed
-    ├── data_audit_report.md          # step 1
-    ├── decision_log.md               # every decision + reason, step by step
-    ├── final_report.md               # step 9
-    ├── tables/                       # thresholds.json, metrics.csv, metrics.md
-    └── figures/                      # one subfolder per step: data_audit/, rbm/, vae/, evaluation/, bayesian_network/
+│   ├── step08_evaluate_alerts.py          # (step 9 is the written report and README, no script)
+│   ├── step10_build_dashboard_data.py     # exports saved results to dashboard/data (extension)
+│   └── run_all_steps.py                   # runs steps 2-8 in order, skipping up-to-date ones
+├── tests/                                 # pytest, fast (< 1 minute total), no raw CSV needed
+│   ├── data/  models/  alerting/  reporting/   # mirror src/metroguard
+├── dashboard/                             # read-only static site (Vercel), step 10 extension
+│   ├── index.html, metrics.html, scores.html, network.html, data.html, claims.html
+│   ├── assets/                            # styles.css, app.js, charts.js, linemap.js, page-*.js, fonts/
+│   └── data/                              # generated JSON (committed so Vercel can serve it)
+├── outputs/                               # machine artifacts, git-ignored, always regenerable
+│   ├── models/                            # trained weights (.pt / .npz), fitted scaler, bin edges
+│   ├── scores/                            # per-window anomaly scores per model (parquet)
+│   └── logs/                              # per-step run logs incl. runtime
+└── reports/                               # human-readable results, committed
+    ├── data_audit_report.md               # step 1
+    ├── decision_log.md                    # every decision + reason, step by step
+    ├── final_report.md                    # step 9
+    ├── tables/                            # thresholds.json, metrics.csv, metrics.md, training histories, network tables
+    └── figures/                           # one subfolder per step: data_audit/, rbm/, vae/, evaluation/, bayesian_network/
 ```
 
 ### 2.2 Naming rules
@@ -168,7 +174,7 @@ Score per window = max over analog features of |z|, z computed with `fit` mean/s
 - Train three models: k = 1, 5, 10 (same seed, epochs, hidden units).
 - Track per epoch: reconstruction error and mean free energy on `fit` and `fit_validation`; plot.
 - Anomaly score = free energy F(v). Higher = less typical.
-- **Tests (`tests/test_restricted_boltzmann_machine.py`):** on a tiny RBM (e.g. 4 visible, 3 hidden) compare F(v) against brute-force −log Σₕ exp(−E(v,h)); check shapes and value ranges of conditional probabilities; one CD step changes weights in the expected direction on a toy dataset.
+- **Tests (`tests/models/test_restricted_boltzmann_machine.py`):** on a tiny RBM (e.g. 4 visible, 3 hidden) compare F(v) against brute-force −log Σₕ exp(−E(v,h)); check shapes and value ranges of conditional probabilities; one CD step changes weights in the expected direction on a toy dataset.
 - Add a derivation note to the decision log: log-likelihood gradient = data term − model term, why the model term is intractable (partition function), why sampling is needed (Unit III), why Gibbs works for the RBM (bipartite graph ⇒ conditional independence, Unit II), and what CD-k approximates (Unit IV).
 
 ### Step 5 — VAE (`step05_train_vae.py`)
