@@ -1,0 +1,15 @@
+# Normalise text to LF in the repository; Git converts on checkout where the platform needs it.
+* text=auto eol=lf
+
+# Binary files: never diff or convert.
+*.png binary
+*.pdf binary
+*.woff2 binary
+*.parquet binary
+*.npz binary
+*.pt binary
+
+# Generated files: collapsed in diffs and ignored by language statistics.
+dashboard/data/*.json linguist-generated=true
+reports/figures/** linguist-generated=true
+reports/tables/** linguist-generated=true
