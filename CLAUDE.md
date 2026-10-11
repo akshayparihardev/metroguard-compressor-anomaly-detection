@@ -3,7 +3,7 @@
 Read `docs/project_spec.md` (master spec) and `docs/phase1_data_audit_spec.md` (step 1) before writing code. They are the single source of truth. If this file and the spec ever disagree, the spec wins; say so instead of guessing.
 
 ## Stay on scope
-- Build only what the spec describes, step by step, in order. No extra models, features, APIs, external AI services, extra datasets or hyperparameter searches. The only UI allowed is the read-only static dashboard in `dashboard/` (spec step 10): it shows saved pipeline outputs and never trains, scores or reads the raw CSV.
+- Build only what the spec describes, step by step, in order. No extra models, features, APIs, external AI services, extra datasets or hyperparameter searches. The only UI allowed is the static dashboard in `dashboard/` (spec step 10): it shows saved pipeline outputs and never trains, scores or reads the raw CSV. Its "Analyse your data" page (spec step 10b) runs the same pipeline in the visitor's browser on the visitor's own file; it never uploads the file and never changes the MetroGuard results.
 - Ideas outside the spec go under "Possible future work" in `reports/decision_log.md`. Do not build them.
 - Before changing any default in `config.yaml`, state the reason from the audit or training data and log it.
 

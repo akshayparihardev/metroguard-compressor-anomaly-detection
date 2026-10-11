@@ -44,7 +44,8 @@ It learns what **normal** looks like from the first month, then scores how unusu
 4. 🎚️ **Sets thresholds on held-out training data only**, freezes them, and only then touches the test period.
 5. 🚨 **Merges alerts into events** and judges them at **event level** against the four reported leaks.
 6. 🔎 **Explains** alerts: which sensor states look unusual together, without claiming a cause.
-7. 🖥️ **Shows everything** in a read-only dashboard.
+7. 🖥️ **Shows everything** in a dashboard, and lets anyone **run the same pipeline on their own file**, right in
+   the browser.
 
 ## 🏗️ How it works
 
@@ -124,19 +125,41 @@ Every number comes from code that ran and saved its output. The full story, with
 - ♻️ **Reproducible.** Fixed seed, every setting in `config.yaml`, one command per step, and a re-run reproduces every threshold and metric exactly.
 - 🌱 **Efficient.** Raw CSV read once and cached, float32 tensors, GPU for the RBM and VAE, and each step skips
   work whose outputs are up to date.
-- 🧪 **Tested.** 43 fast tests, including the brute-force RBM free-energy check, and `ruff`-clean code.
+- 🧪 **Tested.** 43 fast Python tests, including the brute-force RBM free-energy check, `ruff`-clean code, and
+  13 Node tests for the in-browser pipeline.
 
 ## 🖥️ Dashboard
 
 **Live:** <https://metroguard-compressor-anomaly-detec.vercel.app>
 
-A read-only static site (plain HTML, CSS and JavaScript) in [`dashboard/`](dashboard/README.md), built for Vercel:
+A static site (plain HTML, CSS and JavaScript) in [`dashboard/`](dashboard/README.md), built for Vercel:
 a metro-line timeline of the whole record, interactive score charts with the reported leaks marked, the
 learned Bayesian network, the metrics tables and a "what we can and cannot claim" page. A light theme with an optional pure-black dark
 theme, keyboard-accessible charts, and responsive down to small phones.
 
 ```
 python -m http.server 8000 --directory dashboard
+```
+
+### 📂 Analyse your own data
+
+The **Analyse your data** page runs the whole pipeline on a visitor's own time-series file, **inside their
+browser**. Nothing is uploaded: the file is read locally, the models train in a Web Worker, and the results are kept
+in the browser until the visitor deletes them.
+
+- 📄 **CSV, TSV, Excel or a PDF table.** Column roles (timestamp, sensor, on/off) and the timestamp format are
+  detected, previewed and can be corrected.
+- 🧭 **Same rules as the Python pipeline:** chronological split, everything fitted on the training windows,
+  thresholds frozen on calib before any test window is scored, event-level evaluation against optional reported
+  windows, and our own RBM (Gibbs sampling, CD-k, free energy), VAE, Markov chain and Bayesian network.
+- 🔁 **Checked against Python.** On the full MetroPT-3 file (2 min 49 s in Chromium on a laptop) the browser reproduces the
+  audit, the split, the z-score and Markov thresholds and every detection exactly, and the network reaches the same
+  BIC score. The RBM and VAE flag 20.2-21.6% of windows against Python's 19.9-21.4%, because their random numbers
+  come from a different generator (details in the decision log).
+- ↩️ When no file is analysed, every page shows the MetroGuard results exactly as before, and a banner switches back.
+
+```
+node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON "dashboard/tests/*.test.mjs"
 ```
 
 ## 🚀 Quick start
@@ -191,7 +214,7 @@ src/metroguard/            library code, grouped by role
   reporting/               figures and the dashboard export
 pipeline/                  one thin script per step, plus run_all_steps.py
 tests/                     pytest, mirrors src/metroguard (no raw data needed)
-dashboard/                 the read-only static site
+dashboard/                 the static site, plus the in-browser pipeline (assets/analysis) and its tests
 reports/                   audit report, decision log, final report, tables, figures
 docs/                      project specification
 data/  outputs/            raw and cached data, models, scores, logs (git-ignored, regenerable)

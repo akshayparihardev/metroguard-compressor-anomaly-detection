@@ -541,6 +541,94 @@ GitHub Actions workflow (tests and ruff on every push).
   theme is opt-in through the sidebar button, the button label names the theme it switches to, and the choice is
   remembered across pages and visits. Checked with the browser emulating a dark operating system.
 
+## Analyse your data: the pipeline in the browser (second scope extension, 2026-10-11)
+
+**Why this is outside the original scope.** The author asked that a visitor be able to supply their own dataset and
+get the same analysis, with the MetroGuard results unchanged when no file is given. Choices confirmed by the author:
+the computation runs **in the visitor's browser** (no server, the file is never uploaded), **any time-series file**
+is accepted with a column-mapping step, and the formats are **CSV, Excel and PDF tables**. `docs/project_spec.md`
+(scope lock, layout, new step 10b) and `CLAUDE.md` were amended for this page only; nothing else in the scope lock
+changed, and `dashboard/data/` and `reports/` are untouched by it.
+
+**What was built.**
+- `dashboard/assets/analysis/` re-implements steps 1 to 8 in plain JavaScript (no dependencies), module by module
+  against the Python code: `table-reader.js` (streaming quote-aware CSV parser, delimiter sniffing, column-role
+  detection), `timestamps.js` (ISO, day-first, month-first, Unix seconds and milliseconds, spreadsheet dates, read
+  as naive wall-clock time), `preparation.js` (cadence audit, frozen runs, windows, the chronological split with the
+  same rounding as Python, fit-only scaler and quantile bins), `rbm.js` (Gibbs sampling, CD-k, free energy),
+  `vae.js` (dense layers, manual backpropagation, Adam, early stopping that restores the best epoch), `markov.js`,
+  `bayesian-network.js` (hill climb with BIC, tabu list and the same legal-move rules as pgmpy, BDeu parameters,
+  d-separation, Markov-blanket surprisal), `alerting.js`, `bundle.js` (writes the same JSON documents as step 10)
+  and `pipeline.js`, which runs them in order. A seeded generator (Mulberry32) replaces NumPy's, so a run is
+  repeatable but not bit-identical to Python.
+- `worker.js` runs the analysis in a module Web Worker; `analyse.html` and `page-analyse.js` handle file choice,
+  a preview with one role selector per column, the timestamp format, the PDF confirmation, settings, optional
+  reported windows, progress with cancel, and the summary. `file-import.js` reads the files; `saved-analysis.js`
+  keeps the latest result in IndexedDB.
+- `app.js` now loads either the MetroGuard JSON or the saved analysis, shows a banner with "Back to MetroGuard
+  results", and adds the page to the navigation. All six pages were generalised from four fixed events to any
+  number (including none: detection columns and delay tables are then hidden, and every alert is unconfirmed), and
+  their MetroGuard-specific sentences are kept for the MetroGuard data only; uploaded data gets neutral wording.
+- SheetJS 0.20.3 and pdf.js 4.10.38 (Apache 2.0, licences in `dashboard/assets/vendor/`) are vendored and loaded
+  only when an Excel or PDF file is chosen. No build step was added.
+- 13 Node unit tests in `dashboard/tests/engine.test.mjs` (`node --test`): CSV parsing across chunk boundaries,
+  timestamp detection, column roles, numpy-compatible quantiles and rounding, the split, frozen runs and windows,
+  the RBM free energy against brute force, CD-k lowering the free energy, VAE training, Markov states, structure
+  recovery and d-separation, alert merging and delay, and an end-to-end run that checks the bundle and that every
+  model's thresholds were frozen. `.vercelignore` keeps the tests out of the deployment.
+
+**Rules kept.** Only the visitor's own file is analysed and nothing synthetic is generated. The split is by time;
+scaler, bins, state cut points, network structure, CPDs and thresholds come from the fit or calib windows; each
+model's thresholds are recorded with a timestamp before it scores a test window; evaluation is at event level and
+alerts outside the reported windows are "unconfirmed". The pages make no causal or prediction claims. Visitors
+cannot tune hyperparameters: they choose only what depends on their data (column roles, timestamp format, training
+period, window length, Markov state column, which of k = 1, 5, 10 to train, and reported windows).
+
+**Parity on the real MetroPT-3 file** (all 1,516,948 rows, defaults, the four reported windows), 99th percentile:
+
+| Model | Python flagged | Browser flagged | Python / browser detected | Python / browser unconfirmed per day |
+|---|---:|---:|:---:|---:|
+| Z-score baseline | 10.40% | 10.40% | 4 / 4 | 25.85 / 25.85 |
+| RBM, k = 1 | 19.88% | 21.09% | 4 / 4 | 29.97 / 27.89 |
+| RBM, k = 5 | 20.25% | 20.29% | 4 / 4 | 29.82 / 29.64 |
+| RBM, k = 10 | 20.79% | 20.24% | 4 / 4 | 28.59 / 29.61 |
+| VAE | 21.38% | 21.55% | 4 / 4 | 31.02 / 28.57 |
+| Markov chain | 0.44% | 0.44% | 3 / 3 (events 2, 3, 4) | 3.65 / 3.65 |
+
+The audit (cadence 10 s, 37.9 days without readings, 50,425 frozen readings in 7 runs), the split, the 206,857
+usable test windows, the z-score thresholds (4.7052) and the Markov threshold (4.9048) are identical. The RBM and
+VAE differ slightly because their random initialisation and batch order come from a different generator (the VAE
+stopped at epoch 41 with the best at 36; Python ran 50 with the best at 47); none of the conclusions changes.
+The Bayesian-network search reaches exactly pgmpy's score: BIC −140,851.6 with 18 edges. Fifteen edges are the
+same as Python's; in the other three `COMP_active` stands where Python has `MPG_active`, and the two signals are
+identical in all 28,401 fit windows, so both graphs score the same. Getting there took two changes. A single
+hill climb is path-dependent (pgmpy's own logic, confirmed in its source), so the search runs from 10 seeded node
+orders and keeps the best BIC. And because moves such as X→Y and Y→X have equal scores up to the last bit, which
+differs between JavaScript engines (Node found −140,866.0 with 19 edges, Chromium −140,851.6 with 18, from the
+same code), near-equal moves are now treated as ties and the first in order wins. Node and Chromium then learn
+the same graph with the same 10 restart scores.
+The whole run took 2 min 49 s in Chromium on the author's laptop (CPU only; RBM 117 s, VAE 38 s), and the saved
+result is 1.9 MB.
+
+**Checked in a browser.** The full CSV above; an Excel workbook whose first sheet is notes (the page now opens the
+first sheet that looks like a time series); a 32-page PDF table (1,863 rows recovered exactly, 32 title lines left
+out, repeated headers dropped) run without reported windows; switching back to the MetroGuard results; all seven
+pages in both modes with no error banner and no `null`, `NaN` or `undefined` in the text; and a responsive sweep
+of all seven pages showing an uploaded analysis at seven widths from 280 to 1440 px (49 of 49 passed: no horizontal
+page overflow, nothing outside the viewport, no error banner).
+
+**Bugs found and fixed while testing.** The CSV parser duplicated quoted fields (found by the unit tests); the
+latent-space sample stopped at 8,469 points instead of 12,000; the Markov chain was skipped on hourly data because
+auto mode only tried `Motor_current` (it now falls back to the sensor with the most levels); without reported
+windows the network case study picked a model that raised no alert (it now picks the most selective model that
+did); optional sections passed to `append()` printed the text "null" (a `compact()` helper filters them); the
+network search depended on the JavaScript engine (see above).
+
+**Limits.** Very large files are bounded by browser memory (the 218 MB CSV worked). Excel files hold at most
+1,048,576 rows. PDF tables are rebuilt from text positions, so scans are not supported and the preview must be
+confirmed. A short file can fail the split with a clear message ("too few windows"). The JavaScript models run on
+the CPU, so they are slower than the GPU pipeline.
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train

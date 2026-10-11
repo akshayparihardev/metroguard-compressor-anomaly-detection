@@ -12,7 +12,7 @@ This file is the single source of truth for the whole project. `docs/phase1_data
 
 Learn the normal behaviour of a real metro-train air compressor from sensor data (MetroPT-3, UCI), score how unusual each later period is with several probabilistic models (z-score baseline, RBM trained with Gibbs sampling + Contrastive Divergence, VAE, optional Markov state model), turn scores into alerts using thresholds fixed on training data only, give each alert probabilistic context with a Bayesian Network, and evaluate alerts against the four company-reported air-leak intervals. The deliverable is reproducible code, figures, a metrics table and an honest report.
 
-**Scope lock.** Build exactly what this spec describes. No extra models, no API, no external AI services, no extra datasets, no hyperparameter searches beyond the values listed in `config.yaml`. The single permitted exception is the read-only static dashboard in `dashboard/` (step 10), approved by the author as a deliberate scope extension: it only displays files the pipeline already produced. If something outside this spec looks useful, write it under "Possible future work" in the decision log instead of building it.
+**Scope lock.** Build exactly what this spec describes. No extra models, no API, no external AI services, no extra datasets, no hyperparameter searches beyond the values listed in `config.yaml`. The permitted exceptions are the read-only static dashboard in `dashboard/` (step 10), approved by the author as a deliberate scope extension, which only displays files the pipeline already produced; and its "Analyse your data" page (step 10b, a second approved extension), which runs the same pipeline in the visitor's browser on a file the visitor supplies, never sends that file anywhere and never changes the MetroGuard results. If something outside this spec looks useful, write it under "Possible future work" in the decision log instead of building it.
 
 ## 1. Non-negotiable rules (apply in every step)
 
@@ -85,9 +85,13 @@ DL 2 Project/                              # repo root: only what a reader needs
 │   └── run_all_steps.py                   # runs steps 2-8 in order, skipping up-to-date ones
 ├── tests/                                 # pytest, fast (< 1 minute total), no raw CSV needed
 │   ├── data/  models/  alerting/  reporting/   # mirror src/metroguard
-├── dashboard/                             # read-only static site (Vercel), step 10 extension
-│   ├── index.html, metrics.html, scores.html, network.html, data.html, claims.html
-│   ├── assets/                            # styles.css, app.js, charts.js, linemap.js, page-*.js, fonts/
+├── dashboard/                             # static site (Vercel), step 10 and 10b extensions
+│   ├── index.html, metrics.html, scores.html, network.html, data.html, claims.html, analyse.html
+│   ├── assets/                            # styles.css, app.js, charts.js, linemap.js, page-*.js, fonts/,
+│   │   │                                  # file-import.js, saved-analysis.js
+│   │   ├── analysis/                      # step 10b: the pipeline in JavaScript, run in a Web Worker
+│   │   └── vendor/                        # SheetJS and pdf.js, loaded only for Excel and PDF uploads
+│   ├── tests/                             # node --test unit tests for assets/analysis
 │   └── data/                              # generated JSON (committed so Vercel can serve it)
 ├── outputs/                               # machine artifacts, git-ignored, always regenerable
 │   ├── models/                            # trained weights (.pt / .npz), fitted scaler, bin edges
@@ -212,6 +216,9 @@ Also: sensitivity table for threshold percentile 99 vs 99.5. Outputs: `reports/t
 
 ### Step 10 — Static dashboard (scope extension, `step10_build_dashboard_data.py`)
 Read-only static site in `dashboard/` for Vercel. The build script copies or reshapes **only** files the pipeline already produced (`reports/tables`, `outputs/scores` downsampled to hourly maxima plus window-level series around the four events, `outputs/logs` runtimes) into `dashboard/data/`. No raw CSV, no model weights, no retraining. Every number on a page comes from that data. Pages: overview, metrics (99 vs 99.5), scores over time with failure windows and per-event zoom, Bayesian network, data and training evidence, and a claims-and-limits panel.
+
+### Step 10b — Analyse your data (second scope extension, `dashboard/analyse.html`)
+A visitor can run the same pipeline on their own time-series file (CSV/TSV/text, Excel, or a PDF with a text table) entirely in their browser. The file is never uploaded; the analysis runs in a Web Worker and the result is stored in the browser's IndexedDB, from where the six dashboard pages show it in the same JSON shape as step 10 (with a banner and a way back to the MetroGuard results). `dashboard/assets/analysis/` re-implements steps 1 to 8 in JavaScript with the same rules and `config.yaml` defaults: chronological split, every transform and model fitted on the fit windows, thresholds from calib frozen before each model scores test windows, event-level evaluation with unconfirmed alerts, our own RBM (Gibbs sampling, CD-k, free energy) and VAE, the Markov chain, and the Bayesian network (hill climb with BIC, BDeu parameters). The only visitor choices are the column roles, the timestamp format, the training period (first calendar month or a share), the window length (auto by default), the state column for the Markov chain, which CD-k variants to train, and optional reported windows; nothing else is tunable. On the MetroPT-3 file the JavaScript pipeline must reproduce the Python thresholds and detections (checked by a parity run, recorded in the decision log). The MetroGuard results in `dashboard/data/` and `reports/` are never affected.
 
 ### Step 9 — Final report and README
 `reports/final_report.md` sections:
