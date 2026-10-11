@@ -2,7 +2,7 @@
 
 Edges are learned statistical dependencies, not causes. Terms follow the syllabus.
 
-Learned edges (18): COMP_active -> Towers_active, DV_eletric_active -> MPG_active, DV_pressure_mean -> Motor_current_mean, DV_pressure_mean -> Oil_temperature_mean, DV_pressure_mean -> TP2_mean, H1_mean -> DV_eletric_active, H1_mean -> Oil_temperature_mean, H1_mean -> TP2_mean, MPG_active -> COMP_active, Motor_current_mean -> DV_eletric_active, Motor_current_mean -> H1_mean, Motor_current_mean -> Oil_temperature_mean, Motor_current_mean -> TP2_mean, Reservoirs_mean -> H1_mean, Reservoirs_mean -> TP3_mean, TP3_mean -> DV_eletric_active, TP3_mean -> MPG_active, TP3_mean -> Motor_current_mean
+Learned edges (18): DV_eletric_active -> MPG_active, DV_pressure_mean -> Motor_current_mean, DV_pressure_mean -> Oil_temperature_mean, DV_pressure_mean -> TP2_mean, H1_mean -> DV_eletric_active, H1_mean -> Oil_temperature_mean, H1_mean -> TP2_mean, MPG_active -> COMP_active, MPG_active -> Towers_active, Motor_current_mean -> DV_eletric_active, Motor_current_mean -> H1_mean, Motor_current_mean -> Oil_temperature_mean, Motor_current_mean -> TP2_mean, Reservoirs_mean -> H1_mean, Reservoirs_mean -> TP3_mean, TP3_mean -> DV_eletric_active, TP3_mean -> MPG_active, TP3_mean -> Motor_current_mean
 
 Demonstration edge: `Reservoirs_mean -> TP3_mean` (highest empirical mutual information on fit windows, 1.085 nats).
 
@@ -24,12 +24,12 @@ Demonstration edge: `Reservoirs_mean -> TP3_mean` (highest empirical mutual info
 
 ## Local independence (node vs parents, non-parents, descendants)
 
-- node and a parent: COMP_active and MPG_active, given nothing: **dependent (d-connected)**
-- node and a non-parent non-descendant, given its parents: COMP_active and DV_eletric_active, given MPG_active: **independent (d-separated)**
-- node and a descendant: COMP_active and Towers_active, given nothing: **dependent (d-connected)**
+- node and a parent: DV_eletric_active and H1_mean, given nothing: **dependent (d-connected)**
+- node and a non-parent non-descendant, given its parents: DV_eletric_active and DV_pressure_mean, given H1_mean, Motor_current_mean, TP3_mean: **independent (d-separated)**
+- node and a descendant: DV_eletric_active and MPG_active, given nothing: **dependent (d-connected)**
 
 ## d-separation in chain, fork and collider patterns
 
-- chain MPG_active / COMP_active / Towers_active: connected without evidence = True; connected given COMP_active = False
-- fork Oil_temperature_mean / DV_pressure_mean / TP2_mean: connected without evidence = True; connected given DV_pressure_mean = True
+- chain DV_eletric_active / MPG_active / COMP_active: connected without evidence = True; connected given MPG_active = False
+- fork COMP_active / MPG_active / Towers_active: connected without evidence = True; connected given MPG_active = False
 - collider DV_pressure_mean / Motor_current_mean / TP3_mean: connected without evidence = False; connected given Motor_current_mean = True

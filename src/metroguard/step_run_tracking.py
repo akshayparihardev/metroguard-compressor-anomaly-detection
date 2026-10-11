@@ -3,6 +3,9 @@
 import hashlib
 import json
 import logging
+import os
+import subprocess
+import sys
 import time
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
@@ -11,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
+HASH_SEED_VARIABLE = "PYTHONHASHSEED"
 
 
 def config_fingerprint(config_values: Any) -> str:
@@ -73,3 +77,16 @@ def track_step_run(step_name: str, logs_dir: Path, fingerprint: str) -> Iterator
     }
     manifest_path(logs_dir, step_name).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     logging.getLogger(step_name).info("%s finished in %.1f s", step_name, runtime_seconds)
+
+
+def rerun_with_fixed_hash_seed() -> int | None:
+    """Re-run the current script with PYTHONHASHSEED=0 unless it is already set that way.
+
+    pgmpy's hill-climb search breaks ties between equally scoring edge directions in set-iteration
+    order, which depends on Python's randomised string hashing. Fixing the hash seed makes the
+    learned structure reproducible. Returns the child's exit code, or None if no re-run was needed.
+    """
+    if os.environ.get(HASH_SEED_VARIABLE) == "0":
+        return None
+    environment = {**os.environ, HASH_SEED_VARIABLE: "0"}
+    return subprocess.run([sys.executable, *sys.argv], env=environment, check=False).returncode

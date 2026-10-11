@@ -1,5 +1,4 @@
 parent,child
-COMP_active,Towers_active
 DV_eletric_active,MPG_active
 DV_pressure_mean,Motor_current_mean
 DV_pressure_mean,Oil_temperature_mean
@@ -8,6 +7,7 @@ H1_mean,DV_eletric_active
 H1_mean,Oil_temperature_mean
 H1_mean,TP2_mean
 MPG_active,COMP_active
+MPG_active,Towers_active
 Motor_current_mean,DV_eletric_active
 Motor_current_mean,H1_mean
 Motor_current_mean,Oil_temperature_mean

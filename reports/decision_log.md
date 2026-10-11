@@ -284,15 +284,17 @@ and the binarised COMP, DV_eletric, Towers, MPG. Outputs: `reports/tables/bayesi
 `reports/figures/bayesian_network/bayesian_network_dag.png`.
 
 **Key numbers.**
-- 18 learned edges. Strongest dependency (mutual information 1.085 nats): `TP3_mean -> Reservoirs_mean`.
-  The causal-direction and evidential queries show these two are near-deterministic copies of each other
-  (P about 0.997 to 0.999 on the matching state), which is expected for two pressure sensors on the same
-  circuit. It says nothing about what causes what.
-- d-separation (see the demonstrations file): chain MPG_active / COMP_active / Towers_active is connected
-  (True) and becomes blocked once COMP_active is observed (False); collider DV_pressure_mean /
+- 18 learned edges. Strongest dependency (mutual information 1.085 nats): `Reservoirs_mean -> TP3_mean`.
+  The causal-direction and evidential queries show these two are near-deterministic copies of each other,
+  which is expected for two pressure sensors on the same circuit. The direction of this edge flipped
+  between two otherwise identical runs (see "Reproducibility" below), which is a concrete reminder that
+  learned edge direction says nothing about what causes what.
+- d-separation (see the demonstrations file): chain DV_eletric_active / MPG_active / COMP_active is connected
+  (True) and becomes blocked once MPG_active is observed (False); fork COMP_active / MPG_active /
+  Towers_active is connected (True) and blocked (False) given MPG_active; collider DV_pressure_mean /
   Motor_current_mean / TP3_mean is blocked (False) and becomes connected (True) once Motor_current_mean is
-  observed. The fork shown (Oil_temperature_mean / DV_pressure_mean / TP2_mean) stays connected because
-  other paths exist in this dense DAG.
+  observed. The generator prefers patterns where evidence changes the answer, because this DAG is dense and
+  other paths often keep two nodes connected.
 - Local independence: node vs a parent is dependent, node vs a non-parent non-descendant given its parents
   is independent (d-separated), node vs a descendant is dependent, as the theory predicts.
 
@@ -301,14 +303,13 @@ primary-score models it detected the most reported events on test (4 of 4, ties 
 unconfirmed alerts per day). Explained events: the alert events inside reported windows 1 and 2.
 Share of event windows above the calib 95th percentile of -log P(state | Markov blanket), against 5%
 expected by chance (flag: more than 10%):
-- Window 1: `Towers_active` 42.7% and `COMP_active` 57.3% flagged; `MPG_active` 3.1% and all analog
-  variables not flagged.
-- Window 2: `Towers_active` 39.3%, `COMP_active` 60.0% and `MPG_active` 98.8% flagged; all analog
-  variables not flagged.
+- Window 1: `Towers_active` 42.7% and `MPG_active` 57.3% flagged; `COMP_active` and all analog variables not
+  flagged.
+- Window 2: `Towers_active` 39.3% and `MPG_active` 60.0% flagged; `COMP_active` and all analog variables not
+  flagged.
 Absolute surprisals are small (thousandths of a nat for most variables), so this is a statement about
-association relative to calib, not a strong effect. The flagged variables are the digital compressor
-signals; the analog states were not unusual given their blankets. Wording is "unusual / associated",
-never "caused".
+association relative to calib, not a strong effect. The flagged variables are digital compressor signals;
+the analog states were not unusual given their blankets. Wording is "unusual / associated", never "caused".
 
 **Decisions and reasons.**
 - *Node choice*: the 4 digital signals that are near-constant in February (Oil_level, Caudal_impulses,
@@ -329,6 +330,13 @@ never "caused".
 - pgmpy API drift handled: `pgmpy.causal_discovery.HillClimbSearch` with `return_type="dag"`, categorical
   columns (integer columns are treated as continuous), and `DiscreteBayesianEstimator` for BDeu.
 - New `config.yaml` keys (no existing default changed): the `bayesian_network` section.
+- *Reproducibility*: a first full re-run produced the same scores and metrics but different edge directions
+  for some node pairs. pgmpy's hill climb breaks ties between equally scoring (Markov-equivalent) edge
+  directions in set-iteration order, which depends on Python's randomised string hash; with some hash seeds
+  the search was also very slow (one run was stopped after several minutes). `rerun_with_fixed_hash_seed()`
+  in `step_run_tracking.py` now re-runs step 7 with `PYTHONHASHSEED=0`; two consecutive runs give a
+  byte-identical `bayesian_network_edges.csv`. Hidden consequence: the particular edge directions shown are
+  one member of an equivalence class, not a finding.
 
 ## Step 08: evaluate alerts (2026-10-11)
 

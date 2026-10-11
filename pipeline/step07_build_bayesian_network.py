@@ -2,11 +2,11 @@
 
 import argparse
 import json
+import sys
 
 import numpy as np
 import pandas as pd
 
-from metroguard import bayesian_network as bn
 from metroguard import plotting
 from metroguard.chronological_split import CALIB, FIT_SPLITS
 from metroguard.config_loader import load_config
@@ -21,8 +21,14 @@ from metroguard.step_run_tracking import (
     config_fingerprint,
     configure_step_logging,
     is_step_up_to_date,
+    rerun_with_fixed_hash_seed,
     track_step_run,
 )
+
+if (exit_code := rerun_with_fixed_hash_seed()) is not None:
+    sys.exit(exit_code)
+
+from metroguard import bayesian_network as bn  # noqa: E402
 
 STEP_NAME = "step07_build_bayesian_network"
 STATES_FILE = "window_discrete_states.parquet"

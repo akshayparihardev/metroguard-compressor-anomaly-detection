@@ -9,8 +9,8 @@ Per variable: -log P(observed state | Markov blanket) in nats, averaged over the
 | variable             |   event_mean |   calib_mean |   calib_p95 |   share_above_calib_p95 | unusual   |
 |:---------------------|-------------:|-------------:|------------:|------------------------:|:----------|
 | Towers_active        |       0.6905 |       0.0367 |      0.4513 |                  0.4266 | yes       |
-| COMP_active          |       0.0014 |       0.0001 |      0.0001 |                  0.5727 | yes       |
-| MPG_active           |       0      |       0.0001 |      0      |                  0.0313 | no        |
+| COMP_active          |       0.0016 |       0.0002 |      0.0016 |                  0      | no        |
+| MPG_active           |       0      |       0      |      0      |                  0.5727 | yes       |
 | Reservoirs_mean      |       0.0127 |       0.017  |      0.0082 |                  0.0013 | no        |
 | TP3_mean             |       0.0115 |       0.0169 |      0.0063 |                  0.0013 | no        |
 | Oil_temperature_mean |       0.8055 |       0.8147 |      3.0257 |                  0      | no        |
@@ -25,8 +25,8 @@ Per variable: -log P(observed state | Markov blanket) in nats, averaged over the
 | variable             |   event_mean |   calib_mean |   calib_p95 |   share_above_calib_p95 | unusual   |
 |:---------------------|-------------:|-------------:|------------:|------------------------:|:----------|
 | Towers_active        |       0.6684 |       0.0367 |      0.4513 |                  0.3926 | yes       |
-| COMP_active          |       0.0015 |       0.0001 |      0.0001 |                  0.6    | yes       |
-| MPG_active           |       0      |       0.0001 |      0      |                  0.9877 | yes       |
+| COMP_active          |       0.0016 |       0.0002 |      0.0016 |                  0      | no        |
+| MPG_active           |       0      |       0      |      0      |                  0.6    | yes       |
 | TP3_mean             |       0.0062 |       0.0169 |      0.0063 |                  0      | no        |
 | Oil_temperature_mean |       0.8004 |       0.8147 |      3.0257 |                  0      | no        |
 | Reservoirs_mean      |       0.0006 |       0.017  |      0.0082 |                  0      | no        |

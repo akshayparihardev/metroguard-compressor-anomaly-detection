@@ -54,20 +54,20 @@ Detection delay in hours (nan = not detected):
 
 | model              | score                    | frozen_at           |   calib_windows |
 |:-------------------|:-------------------------|:--------------------|----------------:|
-| markov_state_model | max_transition_surprisal | 2026-10-11T11:24:02 |            7100 |
-| rbm_k1             | free_energy              | 2026-10-11T11:19:21 |            7100 |
-| rbm_k10            | free_energy              | 2026-10-11T11:19:32 |            7100 |
-| rbm_k5             | free_energy              | 2026-10-11T11:19:26 |            7100 |
-| vae                | negative_elbo            | 2026-10-11T11:23:00 |            7100 |
-| vae                | reconstruction_error     | 2026-10-11T11:23:00 |            7100 |
-| zscore_baseline    | max_abs_z                | 2026-10-11T11:17:26 |            7100 |
-| zscore_baseline    | mean_abs_z               | 2026-10-11T11:17:26 |            7100 |
+| markov_state_model | max_transition_surprisal | 2026-10-11T14:43:51 |            7100 |
+| rbm_k1             | free_energy              | 2026-10-11T14:42:43 |            7100 |
+| rbm_k10            | free_energy              | 2026-10-11T14:43:03 |            7100 |
+| rbm_k5             | free_energy              | 2026-10-11T14:42:51 |            7100 |
+| vae                | negative_elbo            | 2026-10-11T14:43:47 |            7100 |
+| vae                | reconstruction_error     | 2026-10-11T14:43:47 |            7100 |
+| zscore_baseline    | max_abs_z                | 2026-10-11T14:42:29 |            7100 |
+| zscore_baseline    | mean_abs_z               | 2026-10-11T14:42:29 |            7100 |
 
 Score-table file modification times (written after thresholds were frozen):
 
 | file                           | last_modified       |
 |:-------------------------------|:--------------------|
-| zscore_baseline_scores.parquet | 2026-10-11T11:17:27 |
-| rbm_scores.parquet             | 2026-10-11T11:19:33 |
-| vae_scores.parquet             | 2026-10-11T11:23:01 |
-| markov_scores.parquet          | 2026-10-11T11:24:02 |
+| zscore_baseline_scores.parquet | 2026-10-11T14:42:29 |
+| rbm_scores.parquet             | 2026-10-11T14:43:03 |
+| vae_scores.parquet             | 2026-10-11T14:43:47 |
+| markov_scores.parquet          | 2026-10-11T14:43:51 |

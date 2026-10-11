@@ -1,7 +1,7 @@
 {
   "markov_state_model": {
     "max_transition_surprisal": {
-      "frozen_at": "2026-10-11T11:24:02",
+      "frozen_at": "2026-10-11T14:43:51",
       "n_calib_windows": 7100,
       "thresholds": {
         "99": 4.904769420623779,
@@ -11,7 +11,7 @@
   },
   "rbm_k1": {
     "free_energy": {
-      "frozen_at": "2026-10-11T11:19:21",
+      "frozen_at": "2026-10-11T14:42:43",
       "n_calib_windows": 7100,
       "thresholds": {
         "99": -46.88372402191161,
@@ -21,7 +21,7 @@
   },
   "rbm_k10": {
     "free_energy": {
-      "frozen_at": "2026-10-11T11:19:32",
+      "frozen_at": "2026-10-11T14:43:03",
       "n_calib_windows": 7100,
       "thresholds": {
         "99": -47.56995876312254,
@@ -31,7 +31,7 @@
   },
   "rbm_k5": {
     "free_energy": {
-      "frozen_at": "2026-10-11T11:19:26",
+      "frozen_at": "2026-10-11T14:42:51",
       "n_calib_windows": 7100,
       "thresholds": {
         "99": -47.508219680786134,
@@ -41,7 +41,7 @@
   },
   "vae": {
     "negative_elbo": {
-      "frozen_at": "2026-10-11T11:23:00",
+      "frozen_at": "2026-10-11T14:43:47",
       "n_calib_windows": 7100,
       "thresholds": {
         "99": 16.93567461013805,
@@ -49,7 +49,7 @@
       }
     },
     "reconstruction_error": {
-      "frozen_at": "2026-10-11T11:23:00",
+      "frozen_at": "2026-10-11T14:43:47",
       "n_calib_windows": 7100,
       "thresholds": {
         "99": 0.5737423157691962,
@@ -59,7 +59,7 @@
   },
   "zscore_baseline": {
     "max_abs_z": {
-      "frozen_at": "2026-10-11T11:17:26",
+      "frozen_at": "2026-10-11T14:42:29",
       "n_calib_windows": 7100,
       "thresholds": {
         "99": 4.705190286636353,
@@ -67,7 +67,7 @@
       }
     },
     "mean_abs_z": {
-      "frozen_at": "2026-10-11T11:17:26",
+      "frozen_at": "2026-10-11T14:42:29",
       "n_calib_windows": 7100,
       "thresholds": {
         "99": 2.129280905723575,
