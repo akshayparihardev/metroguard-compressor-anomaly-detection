@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analyse your data · MetroGuard</title>
+<meta name="description" content="Run the MetroGuard pipeline on your own time-series file, entirely in your browser.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/schibsted-grotesk-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/styles.css">
+<meta name="theme-color" content="#f2f5f6">
+<script>var t=null;try{t=localStorage.getItem("mg-theme")}catch(e){}t=t==="dark"?"dark":"light";document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]').content=t==="dark"?"#000000":"#f2f5f6"</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="shell" id="shell">
+<main class="main" id="main"><div class="wrap" id="wrap"><div class="skeleton" aria-hidden="true"><i style="width:36%;height:2.6rem"></i><i style="width:70%"></i><i style="width:55%"></i><i class="tall"></i></div></div></main>
+</div>
+<noscript><p style="padding:1rem">Analysing a file needs JavaScript: the whole pipeline runs in your browser.</p></noscript>
+<script type="module" src="assets/page-analyse.js"></script>
+</body>
+</html>

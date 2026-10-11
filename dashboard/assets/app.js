@@ -1,5 +1,7 @@
 // Shared shell, theme, data loading and formatting for every dashboard page.
 
+import { loadAnalysis, setShowingAnalysis, showingAnalysis } from "./saved-analysis.js";
+
 const NAV = [
   ["index.html", "Overview"],
   ["metrics.html", "Metrics"],
@@ -7,21 +9,50 @@ const NAV = [
   ["network.html", "Bayesian network"],
   ["data.html", "Data and training"],
   ["claims.html", "Claims and limits"],
+  ["analyse.html", "Analyse your data"],
 ];
 
 const cache = new Map();
+
+// The visitor's own analysis, when they chose to view it; otherwise the pages read the MetroGuard results.
+let analysis = null;
+const analysisReady = showingAnalysis()
+  ? loadAnalysis()
+      .then((bundle) => {
+        analysis = bundle ?? null;
+        if (!analysis) setShowingAnalysis(false);
+      })
+      .catch(() => setShowingAnalysis(false))
+  : Promise.resolve();
 
 export function loadJSON(name) {
   if (!cache.has(name)) {
     cache.set(
       name,
-      fetch(`data/${name}.json`).then((response) => {
-        if (!response.ok) throw new Error(`Could not load data/${name}.json (${response.status})`);
-        return response.json();
+      analysisReady.then(() => {
+        if (analysis) {
+          if (!(name in analysis)) throw new Error(`The saved analysis has no "${name}" section.`);
+          return analysis[name];
+        }
+        return fetch(`data/${name}.json`).then((response) => {
+          if (!response.ok) throw new Error(`Could not load data/${name}.json (${response.status})`);
+          return response.json();
+        });
       }),
     );
   }
   return cache.get(name);
+}
+
+/** True when the page is showing the visitor's own analysis rather than the MetroGuard results. */
+export const isUpload = (context) => context.source?.kind === "upload";
+
+/** Reported window numbers, 1..n. */
+export const eventIds = (context) => context.windows.map((w) => w.event);
+
+export function showMetroGuardResults() {
+  setShowingAnalysis(false);
+  location.reload();
 }
 
 export function el(tag, attributes = {}, ...children) {
@@ -39,6 +70,9 @@ export function el(tag, attributes = {}, ...children) {
   }
   return node;
 }
+
+/** Drops null and false so optional sections can be passed straight to append() or replaceChildren(). */
+export const compact = (...nodes) => nodes.filter((node) => node != null && node !== false);
 
 export function svg(tag, attributes = {}, ...children) {
   const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -75,6 +109,7 @@ export const fmt = {
     const whole = Math.round(s);
     return `${Math.floor(whole / 60)} min ${whole % 60} s`;
   },
+  windowLength: (s) => (s <= 120 ? `${s} s` : s < 3600 ? `${s / 60} min` : s < 86400 ? `${s / 3600} h` : `${s / 86400} day`),
 };
 
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -152,13 +187,15 @@ export function initShell(page, title, description) {
       "div",
       { class: "rail-foot" },
       toggle,
-      el(
-        "span",
-        { class: "src" },
-        "Data: ",
-        el("a", { href: "https://doi.org/10.24432/C5VW3R", rel: "noopener" }, "MetroPT-3, UCI"),
-        ", CC BY 4.0.",
-      ),
+      analysis
+        ? el("span", { class: "src" }, "Data: your file, analysed in this browser.")
+        : el(
+            "span",
+            { class: "src" },
+            "Data: ",
+            el("a", { href: "https://doi.org/10.24432/C5VW3R", rel: "noopener" }, "MetroPT-3, UCI"),
+            ", CC BY 4.0.",
+          ),
     ),
   );
 
@@ -168,11 +205,35 @@ export function initShell(page, title, description) {
   wrap.prepend(
     el("header", { class: "reveal" }, el("h1", {}, title), description ? el("p", { class: "lede" }, description) : null),
   );
+  if (analysis && page !== "analyse.html") wrap.prepend(sourceBar(analysis.context.source));
   return { wrap };
+}
+
+function sourceBar(source) {
+  return el(
+    "div",
+    { class: "source-bar reveal", role: "status" },
+    el("span", { class: "source-dot", "aria-hidden": "true" }),
+    el("span", { class: "source-text" }, "Showing your analysis of ", el("b", {}, source.file_name), `, run in this browser on ${source.analysed_at}.`),
+    el(
+      "span",
+      { class: "source-actions" },
+      el("a", { class: "btn", href: "analyse.html" }, "Analyse another file"),
+      el("button", { class: "btn", type: "button", onclick: showMetroGuardResults }, "Back to MetroGuard results"),
+    ),
+  );
 }
 
 export function footer(context) {
   const total = context.runtimes_seconds.run_all_steps + context.runtimes_seconds.step01_audit_raw_data;
+  if (isUpload(context)) {
+    return el(
+      "footer",
+      { class: "footer" },
+      el("p", {}, `Every number on these pages was computed in this browser from ${context.source.file_name} on ${context.source.analysed_at}. The file was not sent anywhere, and the results are stored only in this browser.`),
+      el("p", {}, `Seed ${context.seed}. Analysis time in this browser: ${fmt.seconds(total)}. Exploratory results from one record; no claim of failure prediction or causation.`),
+    );
+  }
   return el(
     "footer",
     { class: "footer" },
@@ -324,7 +385,7 @@ export function segmented({ label, options, value, onChange }) {
   return wrapper;
 }
 
-export function eventPills(ids, nEvents = 4) {
+export function eventPills(ids, nEvents) {
   const detected = new Set(String(ids).split(";").filter((v) => v !== "none").map(Number));
   return el(
     "span",
