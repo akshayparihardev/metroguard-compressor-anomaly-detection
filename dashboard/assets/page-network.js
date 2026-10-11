@@ -1,4 +1,4 @@
-import { el, fmt, footer, initShell, loadJSON, plainTable, showError, svg } from "./app.js";
+import { compact, el, fmt, footer, initShell, isUpload, loadJSON, plainTable, showError, svg } from "./app.js";
 
 const WIDTH = 760;
 const HEIGHT = 540;
@@ -32,10 +32,11 @@ function conditionalTable(heading, table) {
 
 try {
   const [context, network] = await Promise.all([loadJSON("context"), loadJSON("network")]);
+  const upload = isUpload(context);
   const { wrap } = initShell(
     "network.html",
     "Bayesian network",
-    "A network of sensor states learned on the training month only. Arrows are statistical dependencies, not causes, and some directions are arbitrary.",
+    `A network of sensor states learned on the ${upload ? "training period" : "training month"} only. Arrows are statistical dependencies, not causes, and some directions are arbitrary.`,
   );
 
   const { nodes, edges } = network;
@@ -93,7 +94,28 @@ try {
 
   const demo = network.demonstration;
   const alert = network.alert_context;
-  wrap.append(
+  const eventNames = alert.events.map((e) => e.heading.split(":")[0].toLowerCase());
+  const demonstration = demo
+    ? [
+        el("h2", {}, "What the network predicts"),
+        el("p", {}, upload
+          ? `The strongest learned dependency (mutual information ${fmt.num(demo.mutual_information, 3)} nats) is between ${short(demo.parent)} and ${short(demo.child)}. The two tables read the same dependency in both directions: knowing either state shifts the probabilities of the other.`
+          : `The strongest learned dependency (mutual information ${fmt.num(demo.mutual_information, 3)} nats) is between ${short(demo.parent)} and ${short(demo.child)}. They are two pressure measurements on the same circuit, so each state of one almost fixes the state of the other, in either direction.`),
+        el("div", { class: "grid-2" },
+          el("div", {}, conditionalTable(demo.causal_heading, demo.causal_table)),
+          el("div", {}, conditionalTable(demo.evidential_heading, demo.evidential_table)),
+        ),
+
+        el("h2", {}, "Independence checks"),
+        el("p", {}, "The three local-independence cases and the three d-separation patterns, evaluated on the learned graph."),
+        el("div", { class: "grid-2" },
+          el("div", {}, el("h3", {}, "Local independence"), el("ul", { class: "list" }, demo.local_independence.map((t) => el("li", {}, t.replace(/\*\*/g, ""))))),
+          el("div", {}, el("h3", {}, "Chain, fork and collider"), el("ul", { class: "list" }, demo.d_separation.map((t) => el("li", {}, t.replace(/connected/g, "d-connected"))))),
+        ),
+      ]
+    : [el("div", { class: "note" }, el("p", {}, "The structure search found no dependency between the variables in the training period, so there is no query or independence check to show."))];
+
+  wrap.append(...compact(
     el("div", { class: "net" },
       el("div", { class: "net-canvas" }, root),
       el("div", {}, side,
@@ -105,24 +127,16 @@ try {
         })),
     ),
     el("div", { class: "note warn" },
-      el("p", {}, el("strong", {}, "These arrows are not causes. "), "Several edges belong to a group of directions the data cannot tell apart: in two otherwise identical runs, some edges came back pointing the other way. The structure shows which sensor states vary together, nothing more.")),
+      el("p", {}, el("strong", {}, "These arrows are not causes. "), upload
+        ? "Many edges belong to a group of directions the data cannot tell apart, so a reversed arrow would often fit the data just as well. The structure shows which sensor states vary together, nothing more."
+        : "Several edges belong to a group of directions the data cannot tell apart: in two otherwise identical runs, some edges came back pointing the other way. The structure shows which sensor states vary together, nothing more.")),
 
-    el("h2", {}, "What the network predicts"),
-    el("p", {}, `The strongest learned dependency (mutual information ${fmt.num(demo.mutual_information, 3)} nats) is between ${short(demo.parent)} and ${short(demo.child)}. They are two pressure measurements on the same circuit, so each state of one almost fixes the state of the other, in either direction.`),
-    el("div", { class: "grid-2" },
-      el("div", {}, conditionalTable(demo.causal_heading, demo.causal_table)),
-      el("div", {}, conditionalTable(demo.evidential_heading, demo.evidential_table)),
-    ),
+    ...demonstration,
 
-    el("h2", {}, "Independence checks"),
-    el("p", {}, "The three local-independence cases and the three d-separation patterns, evaluated on the learned graph."),
-    el("div", { class: "grid-2" },
-      el("div", {}, el("h3", {}, "Local independence"), el("ul", { class: "list" }, demo.local_independence.map((t) => el("li", {}, t.replace(/\*\*/g, ""))))),
-      el("div", {}, el("h3", {}, "Chain, fork and collider"), el("ul", { class: "list" }, demo.d_separation.map((t) => el("li", {}, t.replace(/connected/g, "d-connected"))))),
-    ),
-
-    el("h2", {}, "What the network says about two alerts"),
-    el("p", {}, `For the alert events the ${context.model_labels[alert.model]} raised inside reported windows 1 and 2, each variable's observed state was scored by how unlikely it is given the variables around it. The column "share above calibration p95" is the fraction of event windows more surprising than the 95th percentile of the training month's calibration windows; a variable is marked unusual when that share is more than twice what chance would give (5%).`),
+    el("h2", {}, upload ? "What the network says about the alerts" : "What the network says about two alerts"),
+    alert.events.length
+      ? el("p", {}, `For the alert events the ${context.model_labels[alert.model]} raised ${!upload ? "inside reported windows 1 and 2" : context.windows.length ? `inside ${eventNames.join(" and ")}` : "with the highest peak scores"}, each variable's observed state was scored by how unlikely it is given the variables around it. The column "share above calibration p95" is the fraction of event windows more surprising than the 95th percentile of the ${upload ? "training period's" : "training month's"} calibration windows; a variable is marked unusual when that share is more than twice what chance would give (5%).`)
+      : el("div", { class: "note" }, el("p", {}, `The ${context.model_labels[alert.model]} raised no alert event ${context.windows.length ? "inside a reported window" : "in the test period"}, so there is no alert to examine.`)),
     ...alert.events.flatMap((event) => [
       el("h3", {}, event.heading.replace(/^Reported window (\d+): alert event (.+) to (.+) \((\d+) usable windows\)$/, (m, n, a, b, w) => `Reported window ${n}: alert event ${a} to ${b} (${w} usable windows)`)),
       plainTable({
@@ -137,9 +151,13 @@ try {
         rows: event.table,
       }),
     ]),
-    el("p", { class: "muted small" }, "Values are −log P(state | Markov blanket) in nats. The flagged variables are digital compressor signals and the effects are small in absolute terms. This describes association with the alert, not a cause."),
+    alert.events.length
+      ? el("p", { class: "muted small" }, upload
+          ? "Values are −log P(state | Markov blanket) in nats. This describes association with the alert, not a cause."
+          : "Values are −log P(state | Markov blanket) in nats. The flagged variables are digital compressor signals and the effects are small in absolute terms. This describes association with the alert, not a cause.")
+      : null,
     footer(context),
-  );
+  ));
   refresh();
 } catch (error) {
   initShell("network.html", "Bayesian network");

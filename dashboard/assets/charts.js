@@ -149,9 +149,8 @@ function summarise(panel, spec) {
     scored += 1;
     if (ys[i] > panel.threshold) above += 1;
   }
-  const unit = spec.mode === "window" ? "windows" : "hours";
   return scored
-    ? `${fmt.int(above)} of ${fmt.int(scored)} scored ${unit} above threshold (${fmt.pct(above / scored, 0)})`
+    ? `${fmt.int(above)} of ${fmt.int(scored)} scored ${spec.unit} above threshold (${fmt.pct(above / scored, 0)})`
     : "no scored data in this range";
 }
 

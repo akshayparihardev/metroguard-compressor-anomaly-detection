@@ -1,5 +1,5 @@
 import { createStack } from "./charts.js";
-import { el, fmt, footer, initShell, loadJSON, plainTable, segmented, showError } from "./app.js";
+import { compact, el, eventIds, fmt, footer, initShell, isUpload, loadJSON, plainTable, segmented, showError } from "./app.js";
 
 const DEFAULT_MODELS = ["zscore_baseline", "rbm_k5", "vae", "markov_state_model"];
 const PERCENTILES = [["99", "99th"], ["99.5", "99.5th"]];
@@ -10,18 +10,23 @@ try {
   const [context, timeline, metrics, audit] = await Promise.all([
     loadJSON("context"), loadJSON("timeline"), loadJSON("metrics"), loadJSON("audit"),
   ]);
+  const upload = isUpload(context);
+  const ids = eventIds(context);
   const { wrap } = initShell(
     "scores.html",
     "Scores over time",
-    "Each panel is one model's anomaly score. Orange marks scores above the threshold fixed on the training month, and red bands are the reported failure windows.",
+    `Each panel is one model's anomaly score. Orange marks scores above the threshold fixed on the ${upload ? "training period" : "training month"}${ids.length ? ", and red bands are the reported failure windows" : ""}.`,
   );
 
   const params = new URLSearchParams(location.search);
   const startEvent = Number(params.get("event"));
+  const available = timeline.models.map((m) => m.id);
+  const preferred = DEFAULT_MODELS.filter((id) => available.includes(id));
+  const bucket = { 60: "hourly", 1440: "daily" }[timeline.step_minutes] ?? `per-${fmt.windowLength(timeline.step_minutes * 60).replace(" ", "-")}`;
   const state = {
-    models: new Set(DEFAULT_MODELS),
+    models: new Set(preferred.length >= 2 ? preferred : available.slice(0, 4)),
     percentile: "99",
-    range: startEvent >= 1 && startEvent <= 4 ? startEvent : "full",
+    range: ids.includes(startEvent) ? startEvent : "full",
     zoom: null,
   };
   const eventCache = new Map();
@@ -42,7 +47,7 @@ try {
     },
   });
 
-  const rangeOptions = [["full", "Full record"], ...[1, 2, 3, 4].map((n) => [n, `Event ${n}`])];
+  const rangeOptions = [["full", "Full record"], ...ids.map((n) => [n, `Event ${n}`])];
 
   const chipButtons = full.map((m) =>
     el("button", {
@@ -55,11 +60,11 @@ try {
       },
     }, m.label),
   );
-  controls.append(
-    segmented({ label: "Range", options: rangeOptions, value: state.range, onChange: (v) => { state.range = v; state.zoom = null; draw(true); } }),
+  controls.append(...compact(
+    ids.length ? segmented({ label: "Range", options: rangeOptions, value: state.range, onChange: (v) => { state.range = v; state.zoom = null; draw(true); } }) : null,
     segmented({ label: "Threshold", options: PERCENTILES, value: state.percentile, onChange: (v) => { state.percentile = v; draw(false); } }),
     el("div", { class: "chips", role: "group", "aria-label": "Models shown" }, chipButtons),
-  );
+  ));
 
   const thresholdOf = (series, model) => (state.percentile === "99" ? series.threshold_p99 : series.threshold_p99_5) ?? model.threshold_p99;
 
@@ -76,33 +81,35 @@ try {
       spec = {
         ...base,
         mode: "hourly",
+        unit: timeline.step_minutes === 60 ? "hours" : "periods",
         xMin: state.zoom?.[0] ?? xs[0],
         xMax: state.zoom?.[1] ?? xs[total - 1],
         markers: [{ minute: timeline.test_start_minute, label: "Test period begins", colour: "ink", dash: [5, 4] }],
         panels: shown.map((m, i) => ({
-          label: m.label, sub: `${m.score_label}, hourly maximum`, scale: m.scale, showMarkerLabels: i === 0,
+          label: m.label, sub: `${m.score_label}, ${bucket} maximum`, scale: m.scale, showMarkerLabels: i === 0,
           threshold: state.percentile === "99" ? m.threshold_p99 : m.threshold_p99_5,
           series: { xs, ys: m.values },
         })),
       };
-      hint.textContent = "Hourly maximum of the window scores (display only; metrics use every window). Drag across a chart to zoom, double-click to reset. Keyboard: focus a chart and use the arrow keys (Shift for bigger steps).";
+      hint.textContent = `${bucket[0].toUpperCase()}${bucket.slice(1)} maximum of the window scores (display only; metrics use every window). Drag across a chart to zoom, double-click to reset. Keyboard: focus a chart and use the arrow keys (Shift for bigger steps).`;
     } else {
       const event = await loadEvent(state.range);
       spec = {
         ...base,
         mode: "window",
+        unit: "windows",
         xMin: state.zoom?.[0] ?? event.lead_start_minute - EVENT_PAD_BEFORE_MINUTES,
         xMax: state.zoom?.[1] ?? event.end_minute + EVENT_PAD_AFTER_MINUTES,
         markers: [{ minute: event.lead_start_minute, label: `${context.lead_tolerance_hours} h lead range begins`, colour: "ink", dash: [3, 4] }],
         panels: shown.map((m, i) => {
           const series = event.series.find((s) => s.id === m.id);
           return {
-            label: m.label, sub: `${m.score_label}, every ${context.window_seconds} s window`, scale: m.scale, showMarkerLabels: i === 0,
+            label: m.label, sub: `${m.score_label}, every ${fmt.windowLength(context.window_seconds)} window`, scale: m.scale, showMarkerLabels: i === 0,
             threshold: thresholdOf(series, m), series: { xs: series.minutes, ys: series.values },
           };
         }),
       };
-      hint.textContent = "Every 60 s window around the reported window. Orange dots are alert windows. Blank stretches are gaps or frozen data that were not scored. Keyboard: focus a chart and use the arrow keys.";
+      hint.textContent = `Every ${fmt.windowLength(context.window_seconds)} window around the reported window. Orange dots are alert windows. Blank stretches are gaps or frozen data that were not scored. Keyboard: focus a chart and use the arrow keys.`;
     }
     stack.render(spec, { animate });
     paintFacts();
@@ -112,7 +119,9 @@ try {
     if (state.range === "full") {
       facts.replaceChildren(
         el("div", { class: "note" },
-          el("p", {}, "The training month is on the left of the dashed line. Scores jump after it for most models because the later months differ from the training month, not because every later window is abnormal. Open an event to see its scores window by window.")),
+          el("p", {}, upload
+            ? `The training period is on the left of the dashed line. A score that stays high after it means the later data differs from the training period for that model, which is not the same as every later window being abnormal.${ids.length ? " Open an event to see its scores window by window." : ""}`
+            : "The training month is on the left of the dashed line. Scores jump after it for most models because the later months differ from the training month, not because every later window is abnormal. Open an event to see its scores window by window.")),
       );
       return;
     }
@@ -142,7 +151,7 @@ try {
       el("span", {}, el("i", { class: "sw-line" }), "Score below threshold"),
       el("span", {}, el("i", { class: "sw-alert" }), "Score above threshold (diamonds mark single windows)"),
       el("span", {}, el("i", { class: "sw-dash" }), "Frozen threshold"),
-      el("span", {}, el("i", { class: "sw-fail" }), "Reported failure window"),
+      ids.length ? el("span", {}, el("i", { class: "sw-fail" }), "Reported failure window") : null,
     ),
     chartHost,
     hint,
