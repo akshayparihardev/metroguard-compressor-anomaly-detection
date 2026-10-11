@@ -23,3 +23,10 @@ vae: {latent_dim: 6, hidden_sizes: [64, 32], epochs: 50, batch_size: 256, learni
 thresholds: {percentiles: [99, 99.5], primary_percentile: 99}
 alerts: {merge_gap_minutes: 10, min_event_windows: 1}
 evaluation: {lead_tolerance_hours: 24}
+bayesian_network:
+  nodes: [TP2_mean, TP3_mean, H1_mean, DV_pressure_mean, Reservoirs_mean, Oil_temperature_mean, Motor_current_mean, COMP_active, DV_eletric_active, Towers_active, MPG_active]
+  scoring_method: bic-d
+  max_indegree: 3
+  equivalent_sample_size: 10
+  context_events: 2
+  context_percentile: 95

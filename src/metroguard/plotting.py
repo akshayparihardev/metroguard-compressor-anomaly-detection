@@ -244,3 +244,27 @@ def plot_vae_training_curves(history: pd.DataFrame, path: Path) -> Path:
         ax.legend(fontsize=8)
     fig.suptitle("VAE training curves; early stopping on fit_validation loss")
     return save_figure(fig, path)
+
+
+DAG_LAYOUT_SEED = 42
+
+
+def plot_bayesian_network_dag(edges: list[tuple[str, str]], nodes: list[str], path: Path) -> Path:
+    """Learned Bayesian network structure; arrows show learned edge direction, not causes."""
+    import networkx as nx
+
+    graph = nx.DiGraph()
+    graph.add_nodes_from(nodes)
+    graph.add_edges_from(edges)
+    labels = {n: n.removesuffix("_mean").removesuffix("_active") for n in nodes}
+    positions = nx.spring_layout(graph, seed=DAG_LAYOUT_SEED, k=2.2, iterations=300)
+    fig, ax = plt.subplots(figsize=(10, 7))
+    nx.draw_networkx_nodes(graph, positions, node_color="#cfe3f5", edgecolors="black",
+                           node_size=2600, ax=ax)  # fmt: skip
+    nx.draw_networkx_labels(graph, positions, labels, font_size=8, ax=ax)
+    nx.draw_networkx_edges(graph, positions, arrows=True, arrowstyle="-|>", arrowsize=16,
+                           node_size=2600, width=1.3, ax=ax)  # fmt: skip
+    ax.set_title("Bayesian network learned on fit windows (Hill-Climb, BIC). "
+                 "Arrows are learned dependencies, not causes")  # fmt: skip
+    ax.axis("off")
+    return save_figure(fig, path)

@@ -273,6 +273,63 @@ end in the window. Outputs: `outputs/models/markov_transition_matrix.json`,
 - *Per-reading states* are used here (not the per-window state from step 2), as the spec says
   "max over transitions inside it". The `motor_current_state` column from step 2 is not used by this step.
 
+## Step 07: Bayesian network (2026-10-11)
+
+**What was done.** `src/metroguard/bayesian_network.py` and `pipeline/step07_build_bayesian_network.py`
+(2.1 s, CPU) learned a discrete BN with pgmpy 1.1.2 on 28,401 usable `fit` windows: Hill-Climb search with
+the BIC score (`bic-d`, max in-degree 3), then CPDs by Bayesian estimation (BDeu, equivalent sample size 10).
+Nodes (11, from `config.yaml` `bayesian_network.nodes`): the 7 analog window-mean states (3 quantile bins)
+and the binarised COMP, DV_eletric, Towers, MPG. Outputs: `reports/tables/bayesian_network_edges.csv`,
+`reports/tables/bayesian_network_demonstrations.md`, `reports/tables/bayesian_network_alert_context.md`,
+`reports/figures/bayesian_network/bayesian_network_dag.png`.
+
+**Key numbers.**
+- 18 learned edges. Strongest dependency (mutual information 1.085 nats): `TP3_mean -> Reservoirs_mean`.
+  The causal-direction and evidential queries show these two are near-deterministic copies of each other
+  (P about 0.997 to 0.999 on the matching state), which is expected for two pressure sensors on the same
+  circuit. It says nothing about what causes what.
+- d-separation (see the demonstrations file): chain MPG_active / COMP_active / Towers_active is connected
+  (True) and becomes blocked once COMP_active is observed (False); collider DV_pressure_mean /
+  Motor_current_mean / TP3_mean is blocked (False) and becomes connected (True) once Motor_current_mean is
+  observed. The fork shown (Oil_temperature_mean / DV_pressure_mean / TP2_mean) stays connected because
+  other paths exist in this dense DAG.
+- Local independence: node vs a parent is dependent, node vs a non-parent non-descendant given its parents
+  is independent (d-separated), node vs a descendant is dependent, as the theory predicts.
+
+**Alert context.** Model used: `zscore_baseline` (max_abs_z, 99th percentile), chosen because among the
+primary-score models it detected the most reported events on test (4 of 4, ties broken by fewest
+unconfirmed alerts per day). Explained events: the alert events inside reported windows 1 and 2.
+Share of event windows above the calib 95th percentile of -log P(state | Markov blanket), against 5%
+expected by chance (flag: more than 10%):
+- Window 1: `Towers_active` 42.7% and `COMP_active` 57.3% flagged; `MPG_active` 3.1% and all analog
+  variables not flagged.
+- Window 2: `Towers_active` 39.3%, `COMP_active` 60.0% and `MPG_active` 98.8% flagged; all analog
+  variables not flagged.
+Absolute surprisals are small (thousandths of a nat for most variables), so this is a statement about
+association relative to calib, not a strong effect. The flagged variables are the digital compressor
+signals; the analog states were not unusual given their blankets. Wording is "unusual / associated",
+never "caused".
+
+**Decisions and reasons.**
+- *Node choice*: the 4 digital signals that are near-constant in February (Oil_level, Caudal_impulses,
+  Pressure_switch, LPS) and the 3 within-window std features are left out to keep the BN readable and
+  because constant nodes carry no learnable dependency (approved at the step 1 checkpoint).
+- *Unusual flag*: a variable is unusual if the share of event windows above its calib 95th percentile
+  exceeds 2 x 5%. A first version compared the event mean with the calib 95th percentile; that was
+  corrected because it flagged variables whose event mean was below the calib mean and was trivially
+  satisfied where calib surprisal was almost zero.
+- *Which model's events are explained* was chosen by test detections. This is a case-study selection
+  only: no threshold, model or setting was changed because of it.
+- *Order*: `alert_events.py` and `event_evaluation.py` were written during step 7 (earlier than step 8)
+  because the "best model" for the case study needs event-level detection counts. Step 8 reuses them.
+- `pgmpy` 1.1.2 needs `statsmodels.api`, whose time-series DLLs Windows Smart App Control blocks here.
+  `src/metroguard/pgmpy_import_fallback.py` registers a minimal stand-in (only the three regression classes
+  pgmpy asks for) if, and only if, the real import fails. The discrete BN code paths never use it. Also
+  pinned older, loadable builds: scipy 1.17.1 (1.18.1 was blocked) and statsmodels 0.14.6.
+- pgmpy API drift handled: `pgmpy.causal_discovery.HillClimbSearch` with `return_type="dag"`, categorical
+  columns (integer columns are treated as continuous), and `DiscreteBayesianEstimator` for BDeu.
+- New `config.yaml` keys (no existing default changed): the `bayesian_network` section.
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train
