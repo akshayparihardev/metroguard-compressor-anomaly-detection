@@ -239,6 +239,40 @@ lr 0.001, batch 256, beta 1.0, up to 50 epochs, early stopping patience 5 on `fi
 - *Best weights are restored* after early stopping, so the saved model is the best epoch.
 - No VAE test file: the spec's test list has none for the VAE.
 
+## Step 06: Markov state model (2026-10-11)
+
+**Was it supported?** Yes. The step 1 audit found three distinct motor-current states (about 0.05, 3.75
+and 5.95 A), and step 2 re-derived the cut points from `fit` readings only: 1.85 A and 4.35 A.
+
+**What was done.** `src/metroguard/markov_state_model.py` and `pipeline/step06_fit_markov_states.py`
+(0.6 s, CPU/NumPy; no GPU needed) assigned a state to every raw reading, counted state-to-state
+steps on readings inside usable `fit` windows, and estimated the transition matrix with add-one
+smoothing. Score per transition = -log P(s_t | s_{t-1}); window score = max over the transitions that
+end in the window. Outputs: `outputs/models/markov_transition_matrix.json`,
+`outputs/scores/markov_scores.parquet`.
+
+**Key numbers** (`outputs/logs/step06_fit_markov_states.log`).
+- Transition counts on fit readings (rows = from, columns = to; states 0 = idle, 1 = about 3.75 A,
+  2 = about 5.95 A): [[121738, 4, 908], [936, 37769, 15], [1, 926, 9521]].
+- Smoothed matrix diagonal: 0.9926, 0.9754, 0.9111. Rarest observed steps: idle to 3.75 A (4 times) and
+  5.95 A to idle (1 time).
+- Frozen threshold (7,100 calib windows, 2026-10-11 11:24:02): 99th = 99.5th = 4.905
+  (= -log 0.00741, the 0 -> 2 transition).
+- 44 of 252,720 windows have no valid transition (NaN score, never alerted).
+
+**Findings and decisions.**
+- *The 99th and 99.5th percentile thresholds are identical* because the score takes only a few discrete
+  values. With the spec's rule "alert = score strictly above the threshold", only transitions rarer than
+  0 -> 2 raise an alert (idle to 3.75 A, 3.75 A to 5.95 A, 5.95 A to idle). The 99.5 sensitivity row
+  for this model will therefore equal the 99 row.
+- *A transition belongs to the window that contains the later reading*, so a step across a window
+  boundary is scored in the new window.
+- *Steps across gaps are not transitions*: a step counts only if the two readings are at most 2 x the
+  observed cadence (20 s) apart. This matches the audit's gap definition and avoids inventing
+  transitions across missing data.
+- *Per-reading states* are used here (not the per-window state from step 2), as the spec says
+  "max over transitions inside it". The `motor_current_state` column from step 2 is not used by this step.
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train
