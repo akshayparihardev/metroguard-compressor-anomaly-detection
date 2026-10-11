@@ -202,3 +202,23 @@ def plot_motor_current_timeseries(
     ax.set_ylabel("Motor_current (A)")
     ax.set_title(f"Motor_current, raw readings, sample {start:%Y-%m-%d} + {days} days")
     return save_figure(fig, path)
+
+
+def plot_rbm_training_curves(histories: dict[int, pd.DataFrame], path: Path) -> Path:
+    """Reconstruction error and mean free energy per epoch, for each CD-k variant."""
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.5))
+    colours = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    panels = (
+        ("reconstruction_error", "reconstruction error (MSE per visible unit)"),
+        ("mean_free_energy", "mean free energy F(v)"),
+    )
+    for ax, (metric, label) in zip(axes, panels, strict=True):
+        for colour, (k, history) in zip(colours, histories.items(), strict=False):
+            ax.plot(history["epoch"], history[f"fit_{metric}"], color=colour, label=f"k={k} fit")
+            ax.plot(history["epoch"], history[f"validation_{metric}"], color=colour,
+                    linestyle="--", label=f"k={k} fit_validation")  # fmt: skip
+        ax.set_xlabel("epoch")
+        ax.set_ylabel(label)
+    axes[0].legend(fontsize=8)
+    fig.suptitle("RBM training curves: fit (solid) and fit_validation (dashed), CD-k")
+    return save_figure(fig, path)

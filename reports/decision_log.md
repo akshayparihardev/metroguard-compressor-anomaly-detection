@@ -132,6 +132,80 @@ on `fit` windows only. Outputs in `data/processed/`: `window_features.parquet`,
   features are for the VAE and RBM.
 - Tests added in `tests/test_alert_thresholds.py` (22 tests pass in total).
 
+## Step 04: RBM with Gibbs sampling and CD-k (2026-10-11)
+
+**What was done.** `src/metroguard/restricted_boltzmann_machine.py` implements the Bernoulli RBM,
+Gibbs sampling, CD-k and free energy ourselves with PyTorch tensors (no packaged RBM).
+`pipeline/step04_train_rbm.py` trained three models (k = 1, 5, 10; same seed 42, 32 hidden units,
+30 epochs, batch 256, lr 0.01, momentum 0.5, weight decay 1e-4) on `fit_train` (25,561 windows) with
+38 visible units. It ran on the **GPU (CUDA, NVIDIA GeForce RTX 4050 Laptop GPU)**; total step
+time 16.2 s. Outputs: `outputs/models/rbm_k{1,5,10}.pt`, `outputs/scores/rbm_scores.parquet`,
+`reports/tables/rbm_training_history.csv`, `reports/figures/rbm/rbm_training_curves_cd_k.png`.
+
+**Key numbers** (epoch 30, from `rbm_training_history.csv`).
+
+| k | fit recon. error | fit mean F | validation recon. error | validation mean F |
+|---|---|---|---|---|
+| 1 | 0.0610 | -55.38 | 0.0632 | -55.07 |
+| 5 | 0.0608 | -56.01 | 0.0631 | -55.70 |
+| 10 | 0.0609 | -56.03 | 0.0630 | -55.75 |
+
+Frozen thresholds on 7,100 calib windows (free energy, `reports/tables/thresholds.json`, stamped
+2026-10-11 11:19:21 / :26 / :32, each before that model scored test):
+99th percentile -46.88 (k=1), -47.51 (k=5), -47.57 (k=10); 99.5th -45.99, -46.83, -46.80.
+
+**Findings reported, not hidden.**
+- *The RBMs are not converged.* Reconstruction error (0.180 to 0.061) and mean free energy were
+  still falling steadily at epoch 30 for all three models, and the validation curves track the fit
+  curves closely (no overfitting). With the configured 30 epochs and lr 0.01 the models are
+  under-trained. `config.yaml` was not changed, because the spec forbids tuning beyond its listed values;
+  training longer is listed under possible future work.
+- *k = 1, 5 and 10 are almost indistinguishable* in these curves (differences in the third decimal
+  of reconstruction error and about 0.7 in mean free energy). This is a result of this setup, not
+  evidence about CD-k in general.
+- *Negative free energies are expected*: F(v) = -a^T v - sum softplus(.) is not normalised, so only
+  differences between windows matter. Higher = less typical.
+
+**Tests** (`tests/test_restricted_boltzmann_machine.py`, 7 tests, 29 pass in total): F(v) equals
+the brute-force -log sum_h exp(-E(v,h)) on a 4-visible, 3-hidden RBM for all 16 visible vectors;
+free energy stays finite for large weights; conditional probabilities have the right shapes and lie
+in (0, 1); samples are binary; the CD gradient has the expected sign and size on a zero-initialised
+toy RBM; CD-k training lowers the free energy of the training data and raises that of an unseen
+pattern.
+
+**Decisions and reasons.**
+- *Negative phase*: k Gibbs steps starting at the data, sampling intermediate visible vectors and
+  using probabilities at the last step (a standard variance-reducing choice); positive and negative
+  hidden statistics use probabilities. Weight decay applies to W only.
+- *Frozen-before-test order* as in step 3: non-test windows are scored, calib thresholds frozen, then
+  test windows scored.
+- *No early stopping for the RBM*: the spec asks for early stopping only for the VAE; the RBM trains
+  the configured epochs and `fit_validation` is tracked for the curves.
+
+**Derivation note (Units II to IV).**
+- *Log-likelihood gradient.* With p(v) = (1/Z) sum_h exp(-E(v,h)) and Z = sum_{v,h} exp(-E(v,h)),
+  d log p(v) / dW_ij = <v_i h_j>_data - <v_i h_j>_model. The data term is easy: given v, the hidden
+  units are conditionally independent, so <v_i h_j>_data uses p(h_j = 1 | v). The model term is the
+  expectation under the model's joint distribution.
+- *Why the model term is intractable.* It needs the partition function Z, a sum over all
+  2^(n_visible + n_hidden) configurations. For 38 visible and 32 hidden units that is 2^70, so it cannot
+  be computed exactly.
+- *Why sampling is needed (Unit III).* An expectation we cannot sum can be estimated from samples
+  drawn from the distribution, here the model's own distribution, without ever computing Z.
+- *Why Gibbs sampling works for an RBM (Unit II).* The RBM is a bipartite undirected graph (no
+  visible-visible or hidden-hidden edges), so given the visible layer all hidden units are conditionally
+  independent, and vice versa. A whole layer can be sampled at once from p(h | v) = sigmoid(b + W^T v)
+  and p(v | h) = sigmoid(a + W h), and alternating the two gives a Markov chain whose stationary
+  distribution is the RBM's joint distribution.
+- *What CD-k approximates (Unit IV).* Running that chain to convergence for every update is too slow.
+  CD-k starts the chain at the data and stops after k steps, replacing the model expectation with the
+  statistics of the k-step reconstruction. The result is a biased but cheap, low-variance estimate of
+  the gradient, which in practice moves the weights in a useful direction. Larger k lowers the bias
+  at higher cost.
+
 ## Possible future work
+
+- Train the RBM for more epochs (its curves had not flattened at epoch 30), and compare k on
+  converged models. Not done now because the spec fixes epochs at 30 and forbids tuning.
 
 - None yet.
