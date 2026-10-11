@@ -330,6 +330,62 @@ never "caused".
   columns (integer columns are treated as continuous), and `DiscreteBayesianEstimator` for BDeu.
 - New `config.yaml` keys (no existing default changed): the `bayesian_network` section.
 
+## Step 08: evaluate alerts (2026-10-11)
+
+**What was done.** `pipeline/step08_evaluate_alerts.py` (10 s) built alert events (alerts merged when separated
+by at most 10 min, every event kept) from the frozen thresholds and evaluated every model and score on
+**usable test windows only** (206,857 windows over 184.0 calendar days) against the four reported windows
+with a 24 h lead tolerance, both fixed in `config.yaml` before evaluation. Outputs:
+`reports/tables/metrics.csv` (one row per model, score and percentile), `reports/tables/metrics.md`,
+and 11 figures in `reports/figures/evaluation/` (score vs time per model, one zoom per event with all models,
+`rbm_cd_k_comparison.png`).
+
+**Key numbers** (`metrics.csv`, primary scores).
+
+| model | percentile | alert-window fraction | events detected | unconfirmed alerts/day |
+|---|---|---|---|---|
+| zscore_baseline (max_abs_z) | 99 / 99.5 | 0.104 / 0.064 | 4 / 4 | 25.85 / 9.32 |
+| rbm_k1 | 99 / 99.5 | 0.199 / 0.171 | 4 / 4 | 29.97 / 30.02 |
+| rbm_k5 | 99 / 99.5 | 0.203 / 0.172 | 4 / 4 | 29.82 / 32.38 |
+| rbm_k10 | 99 / 99.5 | 0.208 / 0.171 | 4 / 4 | 28.59 / 32.36 |
+| vae (reconstruction_error) | 99 / 99.5 | 0.214 / 0.139 | 4 / 4 | 31.02 / 28.26 |
+| markov_state_model | 99 / 99.5 | 0.0044 / 0.0044 | 3 / 3 (events 2, 3, 4) | 3.65 / 3.65 |
+
+Secondary scores at p99: baseline mean_abs_z 0.112 flagged, 39.29 unconfirmed/day; VAE negative_elbo 0.164
+flagged, 36.35 unconfirmed/day; both detect 4 of 4.
+
+**What these results do and do not show (reported, not hidden).**
+- *Alert rates are far above the calibration rate.* Thresholds were set at the 99th percentile of calib
+  (about 1% flagged), yet 10% to 21% of test windows are flagged for the baseline, RBMs and VAE. February is
+  not representative of later months (see the step 1 notes: different mix of motor-current states,
+  different digital activity). These models mostly detect "different from February", which produces
+  roughly 25 to 40 unconfirmed alert events per day.
+- *"4 of 4 events detected" is weak evidence.* The four detection ranges cover only 7.6 of 184.0 test days
+  (4.2%), so a model flagging 10% to 21% of windows overlaps them almost by chance. Only the Markov model, with
+  a 0.44% alert-window fraction, gives a more selective result (3 of 4, event 1 missed).
+- *Detection delays near -24 h are an artefact*: the delay is clipped to the start of the lead range when an
+  alert event was already running. For event 4 the -17 h delay matches the start of the data after a gap
+  (about 21:30 on 14 July), so it also does not indicate early warning. No prediction claim is made.
+- *The baseline is not beaten.* The z-score baseline has the lowest alert rate among the baseline, RBM and
+  VAE models at both percentiles, and RBM and VAE did not detect more events than it (all 4 of 4). The RBM
+  and VAE are no more selective than the baseline here.
+- *CD-k*: k = 1, 5 and 10 give almost identical alert rates (0.199 to 0.208) and identical detections; the
+  models were also under-trained (step 4), so this says little about CD-k in general.
+- *Percentile sensitivity*: moving from the 99th to the 99.5th percentile lowers the alert fraction for the
+  baseline (0.104 to 0.064) and VAE (0.214 to 0.139) but not meaningfully for the RBMs (about 0.20 to 0.17);
+  unconfirmed alerts per day do not fall for the RBMs. The Markov model's two thresholds are equal (step 6).
+- Frozen-run windows (10,146 in test) and windows with too few readings are excluded, so alerts or
+  detections cannot come from stuck logging.
+
+**Decisions and reasons.**
+- *Delay* uses the first alert event overlapping the range: max(event start, range start) minus window
+  start; negative means before the reported start.
+- *Unconfirmed alerts per day* = alert events not overlapping any detection range divided by the 184.0
+  calendar days of the test period (not only the days with data; 37.9 days of the file are gaps).
+- `metrics.md` states the detection-range share and how to read it, computed in code.
+- Evidence that thresholds were frozen before test scoring (`frozen_at` timestamps versus score-file
+  modification times) is printed at the end of `metrics.md`.
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train

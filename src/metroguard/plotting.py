@@ -268,3 +268,80 @@ def plot_bayesian_network_dag(edges: list[tuple[str, str]], nodes: list[str], pa
                  "Arrows are learned dependencies, not causes")  # fmt: skip
     ax.axis("off")
     return save_figure(fig, path)
+
+
+POSITIVE_SCORES = ("max_abs_z", "mean_abs_z", "reconstruction_error", "negative_elbo")
+ALERT_COLOUR = "tab:orange"
+
+
+def _score_axis(ax: plt.Axes, score_name: str, label: str) -> None:
+    if score_name in POSITIVE_SCORES:
+        ax.set_yscale("log")
+    ax.set_ylabel(label, fontsize=8)
+
+
+def plot_score_vs_time(window_starts: pd.Series, scores: np.ndarray, usable: np.ndarray,
+                       threshold: float, score_name: str, title: str, train_end: pd.Timestamp,
+                       path: Path) -> Path:  # fmt: skip
+    """Hourly maximum of a window score over the full period, threshold and windows marked."""
+    series = pd.Series(np.where(usable, scores, np.nan), index=pd.DatetimeIndex(window_starts))
+    hourly = series.resample("1h").max()
+    fig, ax = plt.subplots(figsize=(13, 4))
+    ax.plot(hourly.index, hourly.to_numpy(), linewidth=0.5, color="tab:blue",
+            label="score (hourly max, display only)")  # fmt: skip
+    ax.axhline(
+        threshold, color="black", linestyle="--", linewidth=1, label="frozen threshold (p99)"
+    )
+    ax.axvline(train_end, color="tab:green", linestyle=":", label="end of training period")
+    shade_failure_windows(ax, REPORTED_FAILURE_WINDOWS)
+    _score_axis(ax, score_name, score_name)
+    ax.set_xlabel("time")
+    ax.set_title(title)
+    ax.legend(loc="upper left", fontsize=8)
+    return save_figure(fig, path)
+
+
+def plot_event_zoom_scores(window: FailureWindow, panels: list[dict], lead_hours: float,
+                           after_hours: float, path: Path) -> Path:  # fmt: skip
+    """Window scores of every model around one reported window, with its alert windows marked."""
+    lead_start = window.start - pd.Timedelta(hours=lead_hours)
+    start, end = lead_start, window.end + pd.Timedelta(hours=after_hours)
+    fig, axes = plt.subplots(len(panels), 1, figsize=(13, 1.9 * len(panels)), sharex=True)
+    for ax, panel in zip(np.atleast_1d(axes), panels, strict=True):
+        times = pd.Series(panel["window_starts"])
+        inside = ((times >= start) & (times <= end) & panel["usable"]).to_numpy()
+        values = panel["scores"][inside]
+        ax.plot(times[inside], values, linewidth=0.5, color="tab:blue")
+        alert = values > panel["threshold"]
+        ax.scatter(
+            times[inside][alert], values[alert], s=3, color=ALERT_COLOUR, label="alert window"
+        )
+        ax.axhline(panel["threshold"], color="black", linestyle="--", linewidth=0.8)
+        ax.axvline(lead_start, color="grey", linestyle=":", linewidth=1)
+        shade_failure_windows(ax, (window,))
+        _score_axis(ax, panel["score"], panel["name"])
+        ax.set_xlim(start, end)
+    np.atleast_1d(axes)[0].legend(loc="upper right", fontsize=7)
+    np.atleast_1d(axes)[0].set_title(
+        f"Event {window.event_id}: model scores; dashed = frozen p99 threshold, red = reported "
+        f"window, dotted grey = start of the {lead_hours:g} h lead tolerance"
+    )
+    np.atleast_1d(axes)[-1].set_xlabel("time")
+    return save_figure(fig, path)
+
+
+def plot_cd_k_comparison(rows: pd.DataFrame, path: Path) -> Path:
+    """RBM variants k = 1, 5, 10 on alert-window fraction and unconfirmed alerts per day."""
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    labels = [f"k={int(k)}\n{n} of 4 events" for k, n in zip(rows["k"], rows["events_detected"],
+                                                              strict=True)]  # fmt: skip
+    for ax, column, label in zip(
+        axes,
+        ("alert_window_fraction", "unconfirmed_alerts_per_day"),
+        ("share of usable test windows flagged", "unconfirmed alert events per day"),
+        strict=True,
+    ):
+        ax.bar(labels, rows[column], color="tab:blue")
+        ax.set_ylabel(label)
+    fig.suptitle("RBM CD-k comparison on test windows (p99 threshold frozen on calib)")
+    return save_figure(fig, path)
