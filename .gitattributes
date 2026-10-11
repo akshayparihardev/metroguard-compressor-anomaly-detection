@@ -13,3 +13,6 @@
 dashboard/data/*.json linguist-generated=true
 reports/figures/** linguist-generated=true
 reports/tables/** linguist-generated=true
+
+# Third-party minified libraries: no diffs, excluded from language statistics.
+dashboard/assets/vendor/** linguist-vendored=true -diff

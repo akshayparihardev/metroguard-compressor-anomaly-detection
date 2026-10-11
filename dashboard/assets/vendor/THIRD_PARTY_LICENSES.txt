@@ -1,0 +1,7 @@
+Third-party libraries, loaded only when a visitor uploads that file type.
+
+xlsx.mini.min.js   SheetJS Community Edition 0.20.3 (https://sheetjs.com), Apache License 2.0
+pdf.min.mjs        pdf.js 4.10.38 (Mozilla, https://mozilla.github.io/pdf.js), Apache License 2.0
+pdf.worker.min.mjs pdf.js 4.10.38 worker, Apache License 2.0
+
+Full licence text: https://www.apache.org/licenses/LICENSE-2.0
