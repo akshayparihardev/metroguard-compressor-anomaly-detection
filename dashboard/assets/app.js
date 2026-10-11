@@ -77,10 +77,17 @@ export const fmt = {
   },
 };
 
-function applyTheme(theme) {
-  if (theme) document.documentElement.dataset.theme = theme;
-  else delete document.documentElement.dataset.theme;
-  window.dispatchEvent(new CustomEvent("themechange"));
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function setTheme(theme, animate) {
+  const apply = () => {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#000000" : "#f2f5f6");
+    window.dispatchEvent(new CustomEvent("themechange"));
+  };
+  if (animate && document.startViewTransition && !reduceMotion()) document.startViewTransition(apply);
+  else apply();
 }
 
 function storedTheme() {
@@ -92,10 +99,7 @@ function storedTheme() {
 }
 
 function currentTheme() {
-  return (
-    document.documentElement.dataset.theme ||
-    (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-  );
+  return document.documentElement.dataset.theme || (darkQuery.matches ? "dark" : "light");
 }
 
 export function cssVar(name) {
@@ -104,8 +108,11 @@ export function cssVar(name) {
 
 export function initShell(page, title, description) {
   document.title = title === "MetroGuard" ? "MetroGuard" : `${title} · MetroGuard`;
-  const stored = storedTheme();
-  if (stored) applyTheme(stored);
+  document.querySelector(".skeleton")?.remove();
+  if (!document.documentElement.dataset.theme) setTheme(storedTheme() || (darkQuery.matches ? "dark" : "light"), false);
+  darkQuery.addEventListener("change", (event) => {
+    if (!storedTheme()) setTheme(event.matches ? "dark" : "light", true);
+  });
 
   const toggle = el(
     "button",
@@ -115,7 +122,7 @@ export function initShell(page, title, description) {
       "aria-pressed": String(currentTheme() === "dark"),
       onclick: () => {
         const next = currentTheme() === "dark" ? "light" : "dark";
-        applyTheme(next);
+        setTheme(next, true);
         toggle.setAttribute("aria-pressed", String(next === "dark"));
         try {
           localStorage.setItem("mg-theme", next);
@@ -287,11 +294,41 @@ export function plainTable({ columns, rows, caption, note, className }) {
   );
 }
 
+export function segmented({ label, options, value, onChange }) {
+  const group = el("div", { class: "seg", role: "group", "aria-label": label });
+  const thumb = el("span", { class: "thumb instant", "aria-hidden": "true" });
+  const buttons = options.map(([optionValue, text]) =>
+    el("button", { type: "button", "data-value": String(optionValue), onclick: () => select(optionValue, true) }, text),
+  );
+  group.append(thumb, ...buttons);
+  let current = value;
+
+  function place(instant) {
+    const active = buttons.find((b) => b.getAttribute("aria-pressed") === "true");
+    if (!active || !active.offsetWidth) return;
+    thumb.classList.toggle("instant", instant || reduceMotion());
+    thumb.style.width = `${active.offsetWidth}px`;
+    thumb.style.transform = `translateX(${active.offsetLeft}px)`;
+  }
+  function select(next, notify) {
+    if (next === current && notify) return;
+    current = next;
+    buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(options[i][0] === next)));
+    place(!notify);
+    if (notify) onChange(next);
+  }
+  buttons.forEach((b, i) => b.setAttribute("aria-pressed", String(options[i][0] === value)));
+  new ResizeObserver(() => place(true)).observe(group);
+  const wrapper = el("div", {}, el("span", { class: "control-label" }, label), group);
+  wrapper.select = (next) => select(next, false);
+  return wrapper;
+}
+
 export function eventPills(ids, nEvents = 4) {
   const detected = new Set(String(ids).split(";").filter((v) => v !== "none").map(Number));
   return el(
     "span",
     { class: "pills", role: "img", "aria-label": detected.size ? `Events detected: ${[...detected].join(", ")}` : "No events detected" },
-    Array.from({ length: nEvents }, (_, i) => el("span", { class: `pill${detected.has(i + 1) ? " on" : ""}` }, String(i + 1))),
+    Array.from({ length: nEvents }, (_, i) => el("span", { class: `pill${detected.has(i + 1) ? " on" : ""}`, style: `--i:${i}` }, String(i + 1))),
   );
 }

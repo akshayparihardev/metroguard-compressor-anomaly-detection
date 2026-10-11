@@ -1,5 +1,5 @@
 import { createStack } from "./charts.js";
-import { el, fmt, footer, initShell, loadJSON, plainTable, showError } from "./app.js";
+import { el, fmt, footer, initShell, loadJSON, plainTable, segmented, showError } from "./app.js";
 
 const DEFAULT_MODELS = ["zscore_baseline", "rbm_k5", "vae", "markov_state_model"];
 const PERCENTILES = [["99", "99th"], ["99.5", "99.5th"]];
@@ -38,27 +38,32 @@ try {
   const stack = createStack(chartHost, {
     onZoom: (a, b) => {
       state.zoom = a == null ? null : [a, b];
-      draw();
+      draw(false);
     },
   });
 
   const rangeOptions = [["full", "Full record"], ...[1, 2, 3, 4].map((n) => [n, `Event ${n}`])];
 
-  function paintControls() {
-    const range = el("div", {}, el("span", { class: "control-label" }, "Range"),
-      el("div", { class: "seg", role: "group", "aria-label": "Range" },
-        rangeOptions.map(([value, label]) => el("button", { type: "button", "aria-pressed": String(state.range === value), onclick: () => { state.range = value; state.zoom = null; paintControls(); draw(); } }, label))));
-    const pct = el("div", {}, el("span", { class: "control-label" }, "Threshold"),
-      el("div", { class: "seg", role: "group", "aria-label": "Threshold percentile" },
-        PERCENTILES.map(([value, label]) => el("button", { type: "button", "aria-pressed": String(state.percentile === value), onclick: () => { state.percentile = value; paintControls(); draw(); } }, label))));
-    const chips = el("div", { class: "chips", role: "group", "aria-label": "Models shown" },
-      full.map((m) => el("button", { class: "chip", type: "button", "aria-pressed": String(state.models.has(m.id)), onclick: () => { state.models.has(m.id) ? state.models.size > 1 && state.models.delete(m.id) : state.models.add(m.id); paintControls(); draw(); } }, m.label)));
-    controls.replaceChildren(range, pct, chips);
-  }
+  const chipButtons = full.map((m) =>
+    el("button", {
+      class: "chip", type: "button", "aria-pressed": String(state.models.has(m.id)),
+      onclick: () => {
+        if (state.models.has(m.id)) { if (state.models.size > 1) state.models.delete(m.id); }
+        else state.models.add(m.id);
+        chipButtons.forEach((b, i) => b.setAttribute("aria-pressed", String(state.models.has(full[i].id))));
+        draw(false);
+      },
+    }, m.label),
+  );
+  controls.append(
+    segmented({ label: "Range", options: rangeOptions, value: state.range, onChange: (v) => { state.range = v; state.zoom = null; draw(true); } }),
+    segmented({ label: "Threshold", options: PERCENTILES, value: state.percentile, onChange: (v) => { state.percentile = v; draw(false); } }),
+    el("div", { class: "chips", role: "group", "aria-label": "Models shown" }, chipButtons),
+  );
 
   const thresholdOf = (series, model) => (state.percentile === "99" ? series.threshold_p99 : series.threshold_p99_5) ?? model.threshold_p99;
 
-  async function draw() {
+  async function draw(animate = false) {
     const shown = full.filter((m) => state.models.has(m.id));
     const base = {
       windows: timeline.windows,
@@ -80,7 +85,7 @@ try {
           series: { xs, ys: m.values },
         })),
       };
-      hint.textContent = "Hourly maximum of the window scores (display only; metrics use every window). Drag across a chart to zoom, double-click to reset.";
+      hint.textContent = "Hourly maximum of the window scores (display only; metrics use every window). Drag across a chart to zoom, double-click to reset. Keyboard: focus a chart and use the arrow keys (Shift for bigger steps).";
     } else {
       const event = await loadEvent(state.range);
       spec = {
@@ -97,9 +102,9 @@ try {
           };
         }),
       };
-      hint.textContent = "Every 60 s window around the reported window. Orange dots are alert windows. Blank stretches are gaps or frozen data that were not scored.";
+      hint.textContent = "Every 60 s window around the reported window. Orange dots are alert windows. Blank stretches are gaps or frozen data that were not scored. Keyboard: focus a chart and use the arrow keys.";
     }
-    stack.render(spec);
+    stack.render(spec, { animate });
     paintFacts();
   }
 
@@ -131,12 +136,11 @@ try {
     );
   }
 
-  paintControls();
   wrap.append(
     controls,
     el("div", { class: "legend" },
       el("span", {}, el("i", { class: "sw-line" }), "Score below threshold"),
-      el("span", {}, el("i", { class: "sw-alert" }), "Score above threshold"),
+      el("span", {}, el("i", { class: "sw-alert" }), "Score above threshold (diamonds mark single windows)"),
       el("span", {}, el("i", { class: "sw-dash" }), "Frozen threshold"),
       el("span", {}, el("i", { class: "sw-fail" }), "Reported failure window"),
     ),
@@ -145,7 +149,7 @@ try {
     facts,
     footer(context),
   );
-  await draw();
+  await draw(true);
 } catch (error) {
   initShell("scores.html", "Scores over time");
   showError(error);

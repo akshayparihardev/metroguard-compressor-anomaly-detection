@@ -1,10 +1,16 @@
 // Canvas charts: a stack of time-series panels sharing one x axis, and a plain multi-line chart.
+// Alerts are marked by shape (diamonds) and by a text summary, never by colour alone.
 
 import { cssVar, el, fmt } from "./app.js";
 
 const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
 const WINDOW_GAP_MINUTES = 5;
+const HOURLY_TOLERANCE_MINUTES = 75;
 const MONTH_STARTS_THRESHOLD_DAYS = 100;
+const REVEAL_MS = 650;
+const DIAMOND = 3.6;
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const easeOutExpo = (t) => (t >= 1 ? 1 : 1 - 2 ** (-10 * t));
 
 function niceStep(range, target) {
   const raw = range / target;
@@ -96,6 +102,7 @@ function palette() {
     grid: cssVar("--line"),
     surface: cssVar("--surface"),
     font: cssVar("--font"),
+    mono: cssVar("--mono"),
   };
 }
 
@@ -111,21 +118,16 @@ function setupCanvas(canvas, width, height) {
 
 function makeYScale(panel, visibleValues, top, bottom) {
   const finite = visibleValues.filter((v) => Number.isFinite(v));
-  const thresholds = [panel.threshold].filter((v) => Number.isFinite(v));
-  const all = finite.concat(thresholds);
+  const all = finite.concat([panel.threshold].filter((v) => Number.isFinite(v)));
   if (!all.length) return null;
   let lo = Math.min(...all);
   let hi = Math.max(...all);
-  const log = panel.scale === "log";
-  if (log) {
+  if (panel.scale === "log") {
     lo = Math.max(lo, 1e-6) / 1.25;
     hi *= 1.25;
     const a = Math.log10(lo);
     const b = Math.log10(hi);
-    return {
-      y: (v) => bottom - ((Math.log10(Math.max(v, lo)) - a) / (b - a)) * (bottom - top),
-      ticks: logTicks(lo, hi),
-    };
+    return { y: (v) => bottom - ((Math.log10(Math.max(v, lo)) - a) / (b - a)) * (bottom - top), ticks: logTicks(lo, hi) };
   }
   const pad = (hi - lo || 1) * 0.08;
   lo -= pad;
@@ -133,7 +135,27 @@ function makeYScale(panel, visibleValues, top, bottom) {
   return { y: (v) => bottom - ((v - lo) / (hi - lo)) * (bottom - top), ticks: linearTicks(lo, hi) };
 }
 
-function drawPanel(ctx, width, height, panel, spec, isLast) {
+function visibleRange(xs, spec) {
+  return [Math.max(0, lowerBound(xs, spec.xMin) - 1), Math.min(xs.length, lowerBound(xs, spec.xMax) + 1)];
+}
+
+function summarise(panel, spec) {
+  const { xs, ys } = panel.series;
+  const [first, last] = visibleRange(xs, spec);
+  let scored = 0;
+  let above = 0;
+  for (let i = first; i < last; i++) {
+    if (xs[i] < spec.xMin || xs[i] > spec.xMax || ys[i] == null) continue;
+    scored += 1;
+    if (ys[i] > panel.threshold) above += 1;
+  }
+  const unit = spec.mode === "window" ? "windows" : "hours";
+  return scored
+    ? `${fmt.int(above)} of ${fmt.int(scored)} scored ${unit} above threshold (${fmt.pct(above / scored, 0)})`
+    : "no scored data in this range";
+}
+
+function drawPanel(ctx, width, height, panel, spec, isLast, reveal) {
   const c = palette();
   const left = 58;
   const right = 14;
@@ -142,37 +164,36 @@ function drawPanel(ctx, width, height, panel, spec, isLast) {
   const plotW = width - left - right;
   const x = (minute) => left + ((minute - spec.xMin) / (spec.xMax - spec.xMin)) * plotW;
   const { xs, ys } = panel.series;
-  const first = Math.max(0, lowerBound(xs, spec.xMin) - 1);
-  const last = Math.min(xs.length, lowerBound(xs, spec.xMax) + 1);
+  const [first, last] = visibleRange(xs, spec);
   ctx.clearRect(0, 0, width, height);
-  ctx.font = `11px ${c.font}`;
 
   const scale = makeYScale(panel, ys.slice(first, last), top, bottom);
-  const geometry = { left, right, plotW, x, fromX: (px) => spec.xMin + ((px - left) / plotW) * (spec.xMax - spec.xMin) };
+  const geometry = { left, right, plotW, x, y: scale ? scale.y : null, fromX: (px) => spec.xMin + ((px - left) / plotW) * (spec.xMax - spec.xMin) };
   if (!scale) {
+    ctx.font = `12px ${c.font}`;
     ctx.fillStyle = c.muted;
     ctx.fillText("No scored windows in this range", left + 8, (top + bottom) / 2);
     return geometry;
   }
 
-  ctx.strokeStyle = c.grid;
-  ctx.fillStyle = c.muted;
   ctx.lineWidth = 1;
   ctx.textAlign = "right";
   ctx.textBaseline = "middle";
+  ctx.font = `10.5px ${c.mono}`;
   for (const t of scale.ticks) {
     const py = Math.round(scale.y(t)) + 0.5;
     if (py < top - 2 || py > bottom + 2) continue;
+    ctx.strokeStyle = c.grid;
     ctx.beginPath();
     ctx.moveTo(left, py);
     ctx.lineTo(width - right, py);
     ctx.stroke();
+    ctx.fillStyle = c.muted;
     ctx.fillText(formatValue(t), left - 8, py);
   }
-  const ticks = timeTicks(spec.xMin, spec.xMax);
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
-  for (const t of ticks) {
+  for (const t of timeTicks(spec.xMin, spec.xMax)) {
     const px = Math.round(x(t.minute)) + 0.5;
     ctx.strokeStyle = c.grid;
     ctx.beginPath();
@@ -181,10 +202,12 @@ function drawPanel(ctx, width, height, panel, spec, isLast) {
     ctx.stroke();
     if (isLast) {
       ctx.fillStyle = c.muted;
+      ctx.font = `10.5px ${c.font}`;
       ctx.fillText(t.label, px, bottom + 6);
     }
   }
 
+  ctx.font = `10.5px ${c.font}`;
   for (const w of spec.windows) {
     if (w.end_minute < spec.xMin || w.start_minute > spec.xMax) continue;
     const a = Math.max(left, x(w.start_minute));
@@ -192,17 +215,23 @@ function drawPanel(ctx, width, height, panel, spec, isLast) {
     ctx.fillStyle = c.failWash;
     ctx.fillRect(a, top, b - a, bottom - top);
     ctx.strokeStyle = c.fail;
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.6;
     ctx.beginPath();
     ctx.moveTo(a + 0.5, top);
     ctx.lineTo(a + 0.5, bottom);
     ctx.stroke();
     ctx.globalAlpha = 1;
+    if (panel.showMarkerLabels && width >= 560 && b - a >= 22) {
+      ctx.fillStyle = c.fail;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`Event ${w.event}`, a + 4, bottom - 4);
+    }
   }
   for (const m of spec.markers ?? []) {
     if (m.minute < spec.xMin || m.minute > spec.xMax) continue;
     const px = Math.round(x(m.minute)) + 0.5;
-    ctx.strokeStyle = m.colour === "ink" ? c.ink2 : c.muted;
+    ctx.strokeStyle = c.ink2;
     ctx.setLineDash(m.dash ?? [2, 4]);
     ctx.beginPath();
     ctx.moveTo(px, top);
@@ -217,6 +246,7 @@ function drawPanel(ctx, width, height, panel, spec, isLast) {
     }
   }
 
+  const revealX = left + plotW * reveal;
   const thresholdY = Number.isFinite(panel.threshold) ? scale.y(panel.threshold) : null;
   const path = () => {
     ctx.beginPath();
@@ -235,11 +265,11 @@ function drawPanel(ctx, width, height, panel, spec, isLast) {
     }
   };
   ctx.lineJoin = "round";
-  ctx.lineWidth = spec.mode === "window" ? 1.1 : 1.2;
+  ctx.lineWidth = spec.mode === "window" ? 1.15 : 1.25;
   const strokeClipped = (colour, y0, y1) => {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(left, y0, plotW, Math.max(0, y1 - y0));
+    ctx.rect(left, y0, Math.max(0, revealX - left), Math.max(0, y1 - y0));
     ctx.clip();
     ctx.strokeStyle = colour;
     path();
@@ -254,79 +284,107 @@ function drawPanel(ctx, width, height, panel, spec, isLast) {
   if (spec.mode === "window" && thresholdY != null) {
     ctx.fillStyle = c.alert;
     for (let i = first; i < last; i++) {
-      if (ys[i] != null && ys[i] > panel.threshold) {
-        ctx.beginPath();
-        ctx.arc(x(xs[i]), scale.y(ys[i]), 1.7, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      const px = x(xs[i]);
+      if (ys[i] == null || ys[i] <= panel.threshold || px > revealX) continue;
+      const py = scale.y(ys[i]);
+      ctx.beginPath();
+      ctx.moveTo(px, py - DIAMOND);
+      ctx.lineTo(px + DIAMOND, py);
+      ctx.lineTo(px, py + DIAMOND);
+      ctx.lineTo(px - DIAMOND, py);
+      ctx.closePath();
+      ctx.fill();
     }
   }
   if (thresholdY != null) {
+    const ty = Math.round(thresholdY) + 0.5;
     ctx.strokeStyle = c.ink2;
     ctx.lineWidth = 1;
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
-    ctx.moveTo(left, Math.round(thresholdY) + 0.5);
-    ctx.lineTo(width - right, Math.round(thresholdY) + 0.5);
+    ctx.moveTo(left, ty);
+    ctx.lineTo(width - right, ty);
     ctx.stroke();
     ctx.setLineDash([]);
+    const label = `${spec.thresholdLabel} threshold`;
+    ctx.font = `10.5px ${c.font}`;
+    const textW = ctx.measureText(label).width;
+    ctx.fillStyle = c.surface;
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(width - right - textW - 12, ty - 17, textW + 10, 15);
+    ctx.globalAlpha = 1;
     ctx.fillStyle = c.ink2;
     ctx.textAlign = "right";
     ctx.textBaseline = "bottom";
-    ctx.fillText(`${spec.thresholdLabel} threshold`, width - right - 4, Math.round(thresholdY) - 3);
+    ctx.fillText(label, width - right - 7, ty - 4);
   }
   return geometry;
 }
 
 export function createStack(container, { onZoom }) {
   let spec = null;
-  let geometries = [];
+  let built = [];
+  let animation = 0;
+  let cursorMinute = null;
   const crosshair = el("div", { class: "xhair" });
-  const tip = el("div", { class: "tip", role: "status" });
+  const tip = el("div", { class: "tip", role: "status", "aria-live": "polite" });
   const selection = el("div", { class: "xhair", style: "background:var(--brand);opacity:.18;width:0" });
   const stack = el("div", { class: "chart-stack" }, crosshair, tip, selection);
   container.replaceChildren(stack);
-  let canvases = [];
 
-  function render(next) {
-    spec = next;
+  function build() {
     stack.querySelectorAll(".panel").forEach((n) => n.remove());
-    canvases = [];
-    geometries = [];
+    built = [];
     const width = stack.clientWidth;
     spec.panels.forEach((panel, index) => {
       const isLast = index === spec.panels.length - 1;
       const height = isLast ? 178 : 152;
-      const canvas = el("canvas", { role: "img", "aria-label": panel.ariaLabel ?? panel.label });
-      const holder = el(
-        "div",
-        { class: "panel" },
-        el("header", {}, el("b", {}, panel.label), el("span", {}, panel.sub)),
-        canvas,
-      );
+      const summary = summarise(panel, spec);
+      const canvas = el("canvas", { role: "img", tabindex: "0", "aria-label": `${panel.label}, ${panel.sub}. ${summary}. Use the left and right arrow keys to inspect values.` });
+      const dot = el("div", { class: "dot" });
+      const holder = el("div", { class: "panel" }, el("header", {}, el("b", {}, panel.label), el("span", {}, panel.sub), el("span", { class: "summary" }, summary)), canvas, dot);
       stack.append(holder);
-      const ctx = setupCanvas(canvas, width, height);
-      geometries.push(drawPanel(ctx, width, height, panel, spec, isLast));
-      canvases.push(canvas);
+      built.push({ panel, canvas, dot, ctx: setupCanvas(canvas, width, height), width, height, isLast, geometry: null });
       bind(canvas, index);
     });
   }
 
+  function paint(reveal = 1) {
+    built.forEach((b) => {
+      b.geometry = drawPanel(b.ctx, b.width, b.height, b.panel, spec, b.isLast, reveal);
+    });
+  }
+
+  function render(next, { animate = false } = {}) {
+    spec = next;
+    cancelAnimationFrame(animation);
+    build();
+    hide();
+    if (!animate || reducedMotion()) { paint(1); return; }
+    const started = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - started) / REVEAL_MS);
+      paint(easeOutExpo(t));
+      if (t < 1) animation = requestAnimationFrame(step);
+    };
+    animation = requestAnimationFrame(step);
+  }
+
   function minuteAt(event, canvas, index) {
     const rect = canvas.getBoundingClientRect();
-    return { minute: geometries[index].fromX(event.clientX - rect.left), px: event.clientX - rect.left, rect };
+    const px = event.clientX - rect.left;
+    return { minute: built[index].geometry.fromX(px), px };
   }
 
   function bind(canvas, index) {
     let dragStart = null;
     canvas.addEventListener("pointermove", (event) => {
-      const { minute, px, rect } = minuteAt(event, canvas, index);
-      const g = geometries[index];
+      const { minute, px } = minuteAt(event, canvas, index);
+      const g = built[index].geometry;
       if (px < g.left || px > g.left + g.plotW) { hide(); return; }
-      const stackRect = stack.getBoundingClientRect();
-      crosshair.style.display = "block";
-      crosshair.style.left = `${rect.left - stackRect.left + px}px`;
       if (dragStart != null) {
+        const stackRect = stack.getBoundingClientRect();
+        const rect = canvas.getBoundingClientRect();
         const a = Math.min(dragStart, px);
         selection.style.display = "block";
         selection.style.left = `${rect.left - stackRect.left + a}px`;
@@ -334,29 +392,24 @@ export function createStack(container, { onZoom }) {
         tip.style.display = "none";
         return;
       }
-      showTip(minute, event.clientX - stackRect.left, event.clientY - stackRect.top, stackRect.width);
+      showAt(minute, event, index);
     });
     canvas.addEventListener("pointerleave", () => { if (dragStart == null) hide(); });
     canvas.addEventListener("pointerdown", (event) => {
       if (event.pointerType === "touch") {
-        const { minute, px, rect } = minuteAt(event, canvas, index);
-        const g = geometries[index];
-        const stackRect = stack.getBoundingClientRect();
-        if (px < g.left || px > g.left + g.plotW) { hide(); return; }
-        crosshair.style.display = "block";
-        crosshair.style.left = `${rect.left - stackRect.left + px}px`;
-        showTip(minute, event.clientX - stackRect.left, event.clientY - stackRect.top, stackRect.width);
+        const { minute, px } = minuteAt(event, canvas, index);
+        const g = built[index].geometry;
+        if (px >= g.left && px <= g.left + g.plotW) showAt(minute, event, index);
         return;
       }
       if (event.button !== 0) return;
-      const { px } = minuteAt(event, canvas, index);
-      dragStart = px;
+      dragStart = minuteAt(event, canvas, index).px;
       canvas.setPointerCapture(event.pointerId);
     });
     canvas.addEventListener("pointerup", (event) => {
       if (dragStart == null) return;
       const { px } = minuteAt(event, canvas, index);
-      const g = geometries[index];
+      const g = built[index].geometry;
       const a = Math.min(dragStart, px);
       const b = Math.max(dragStart, px);
       dragStart = null;
@@ -364,45 +417,66 @@ export function createStack(container, { onZoom }) {
       if (b - a > 8 && onZoom) onZoom(Math.round(g.fromX(a)), Math.round(g.fromX(b)));
     });
     canvas.addEventListener("dblclick", () => onZoom && onZoom(null, null));
+    canvas.addEventListener("keydown", (event) => {
+      const unit = spec.mode === "window" ? 1 : 60;
+      const factor = event.shiftKey ? 10 : 1;
+      if (cursorMinute == null) cursorMinute = (spec.xMin + spec.xMax) / 2;
+      if (event.key === "ArrowRight") cursorMinute += unit * factor;
+      else if (event.key === "ArrowLeft") cursorMinute -= unit * factor;
+      else if (event.key === "Home") cursorMinute = spec.xMin;
+      else if (event.key === "End") cursorMinute = spec.xMax;
+      else if (event.key === "Escape") { hide(); return; }
+      else return;
+      event.preventDefault();
+      cursorMinute = Math.min(spec.xMax, Math.max(spec.xMin, cursorMinute));
+      showAt(cursorMinute, null, index);
+    });
+    canvas.addEventListener("blur", hide);
   }
 
   function hide() {
     crosshair.style.display = "none";
     tip.style.display = "none";
+    built.forEach((b) => { b.dot.style.display = "none"; });
   }
 
-  function showTip(minute, left, top, stackWidth) {
-    const rows = spec.panels.map((panel) => {
+  function showAt(minute, event, anchorIndex) {
+    const stackRect = stack.getBoundingClientRect();
+    cursorMinute = minute;
+    const tolerance = spec.mode === "window" ? WINDOW_GAP_MINUTES : HOURLY_TOLERANCE_MINUTES;
+    const rows = built.map(({ panel, dot, geometry, canvas }) => {
       const { xs, ys } = panel.series;
-      if (!xs.length) return null;
-      const i = nearestIndex(xs, minute);
-      const tolerance = spec.mode === "window" ? WINDOW_GAP_MINUTES : 75;
-      if (Math.abs(xs[i] - minute) > tolerance || ys[i] == null) return { panel, value: null };
-      return { panel, value: ys[i] };
+      const i = xs.length ? nearestIndex(xs, minute) : -1;
+      const hit = i >= 0 && Math.abs(xs[i] - minute) <= tolerance && ys[i] != null;
+      if (hit && geometry.y) {
+        dot.style.display = "block";
+        dot.style.left = `${geometry.x(xs[i])}px`;
+        dot.style.top = `${canvas.offsetTop + geometry.y(ys[i])}px`;
+        dot.classList.toggle("over", ys[i] > panel.threshold);
+      } else dot.style.display = "none";
+      return { panel, value: hit ? ys[i] : null };
     });
+    const anchor = built[anchorIndex];
+    const canvasRect = anchor.canvas.getBoundingClientRect();
+    const x = anchor.geometry.x(minute);
+    crosshair.style.display = "block";
+    crosshair.style.left = `${canvasRect.left - stackRect.left + x}px`;
     tip.replaceChildren(
       el("b", {}, fmt.dateTime(Math.round(minute))),
-      ...rows.filter(Boolean).map(({ panel, value }) =>
-        el(
-          "div",
-          { class: "row" },
-          el("span", {}, panel.label),
-          el(
-            "span",
-            { class: value != null && value > panel.threshold ? "over" : "" },
-            value == null ? "no data" : `${formatValue(value)}${value > panel.threshold ? " above" : ""}`,
-          ),
-        ),
+      ...rows.map(({ panel, value }) =>
+        el("div", { class: "row" }, el("span", {}, panel.label), el("span", { class: value != null && value > panel.threshold ? "over" : "" }, value == null ? "no data" : `${formatValue(value)}${value > panel.threshold ? " ◆" : ""}`)),
       ),
     );
     tip.style.display = "block";
+    const pointerX = event ? event.clientX - stackRect.left : canvasRect.left - stackRect.left + x;
+    const pointerY = event ? event.clientY - stackRect.top : canvasRect.top - stackRect.top + 40;
     const w = tip.offsetWidth;
-    tip.style.left = `${left + 16 + w > stackWidth ? left - w - 16 : left + 16}px`;
-    tip.style.top = `${Math.max(8, top - 20)}px`;
+    tip.style.left = `${pointerX + 16 + w > stackRect.width ? pointerX - w - 16 : pointerX + 16}px`;
+    tip.style.top = `${Math.max(8, pointerY - 20)}px`;
   }
 
-  new ResizeObserver(() => { if (spec) render(spec); }).observe(container);
-  window.addEventListener("themechange", () => { if (spec) render(spec); });
+  new ResizeObserver(() => { if (spec) { build(); paint(1); } }).observe(container);
+  window.addEventListener("themechange", () => { if (spec) paint(1); });
   return { render };
 }
 
@@ -411,9 +485,7 @@ export function lineChart(container, { title, subtitle, series, logY = false, xL
   const legend = el(
     "div",
     { class: "legend" },
-    series.map((s) =>
-      el("span", {}, el("i", { class: "sw-line", style: `background:var(${s.colour});${s.dash ? "opacity:.55" : ""}` }), s.label),
-    ),
+    series.map((s) => el("span", {}, el("i", { class: "sw-line", style: `background:var(${s.colour});${s.dash ? "opacity:.55" : ""}` }), s.label)),
   );
   container.replaceChildren(
     el("div", { class: "chart-single" }, el("div", { class: "chart-title" }, title, subtitle ? el("span", {}, subtitle) : null), canvas, legend),
@@ -439,7 +511,7 @@ export function lineChart(container, { title, subtitle, series, logY = false, xL
     if (!logY) { const pad = (hi - lo || 1) * 0.06; lo -= pad; hi += pad; }
     const px = (v) => left + ((v - xMin) / (xMax - xMin || 1)) * plotW;
     const py = (v) => (logY ? bottom - ((Math.log10(v) - a) / (b - a || 1)) * (bottom - top) : bottom - ((v - lo) / (hi - lo)) * (bottom - top));
-    ctx.font = `11px ${c.font}`;
+    ctx.font = `10.5px ${c.mono}`;
     const ticks = logY ? logTicks(lo, hi) : linearTicks(lo, hi, 5);
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
@@ -458,6 +530,7 @@ export function lineChart(container, { title, subtitle, series, logY = false, xL
       ctx.fillStyle = c.muted;
       ctx.fillText(String(Math.round(v)), px(v), bottom + 6);
     }
+    ctx.font = `11px ${c.font}`;
     ctx.fillText(xLabel, left + plotW / 2, bottom + 20);
     ctx.save();
     ctx.translate(12, (top + bottom) / 2);

@@ -58,7 +58,7 @@ try {
       note: `${fmt.int(metrics.n_usable_test_windows)} windows over ${fmt.num(metrics.test_days, 0)} calendar days`,
       columns: [
         { label: "Model", key: "model_label", render: (r) => el("span", {}, el("b", {}, r.model_label), el("span", { class: "muted small" }, ` ${r.score_label}`)) },
-        { label: "Windows flagged", key: "f", align: "right", render: (r) => el("span", { class: "cell-bar" }, el("span", { class: "num" }, fmt.pct(r.alert_window_fraction, r.alert_window_fraction < 0.01 ? 2 : 1)), el("span", { class: "meter" }, el("i", { style: `width:${Math.min(100, (r.alert_window_fraction / 0.25) * 100)}%` }))) },
+        { label: "Windows flagged", key: "f", align: "right", render: (r) => el("span", { class: "cell-bar" }, el("span", { class: "num" }, fmt.pct(r.alert_window_fraction, r.alert_window_fraction < 0.01 ? 2 : 1)), el("span", { class: "meter" }, el("i", { style: `width:${Math.min(100, (r.alert_window_fraction / 0.25) * 100)}%;--i:${primary.indexOf(r)}` }))) },
         { label: "Reported windows detected", key: "d", render: (r) => el("span", {}, eventPills(r.detected_event_ids), el("span", { class: "muted small" }, `  ${r.events_detected} of 4`)) },
         { label: "Unconfirmed alerts per day", key: "u", align: "right", render: (r) => fmt.num(r.unconfirmed_alerts_per_day, 1) },
       ],

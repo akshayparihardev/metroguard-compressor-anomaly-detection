@@ -1,4 +1,4 @@
-import { el, eventPills, fmt, footer, initShell, loadJSON, plainTable, showError, sortableTable } from "./app.js";
+import { el, eventPills, fmt, footer, initShell, loadJSON, plainTable, segmented, showError, sortableTable } from "./app.js";
 
 const PERCENTILES = [99, 99.5];
 const SETS = [["primary", "Primary scores"], ["secondary", "Secondary scores"], ["all", "All scores"]];
@@ -14,19 +14,15 @@ try {
 
   let percentile = context.primary_percentile;
   let scoreSet = "primary";
-  const controls = el("div", { class: "controls" });
+  const controls = el(
+    "div",
+    { class: "controls" },
+    segmented({ label: "Threshold percentile", options: PERCENTILES.map((p) => [p, `${p}th`]), value: percentile, onChange: (v) => { percentile = v; paint(); } }),
+    segmented({ label: "Scores", options: SETS, value: scoreSet, onChange: (v) => { scoreSet = v; paint(); } }),
+  );
   const tableHost = el("div");
   const delayHost = el("div");
   const rows = metrics.rows;
-
-  const segment = (label, options, current, onPick) => {
-    const group = el("div", { class: "seg", role: "group", "aria-label": label });
-    options.forEach(([value, text]) => {
-      const button = el("button", { type: "button", "aria-pressed": String(value === current()) , onclick: () => { onPick(value); paint(); } }, text);
-      group.append(button);
-    });
-    return el("div", {}, el("span", { class: "control-label" }, label), group);
-  };
 
   function selected() {
     return rows.filter(
@@ -35,10 +31,6 @@ try {
   }
 
   function paint() {
-    controls.replaceChildren(
-      segment("Threshold percentile", PERCENTILES.map((p) => [p, `${p}th`]), () => percentile, (v) => (percentile = v)),
-      segment("Scores", SETS, () => scoreSet, (v) => (scoreSet = v)),
-    );
     const data = selected();
     tableHost.replaceChildren(
       sortableTable({
@@ -47,7 +39,7 @@ try {
         columns: [
           { key: "model_label", label: "Model", render: (r) => el("span", {}, el("b", {}, r.model_label), el("span", { class: "muted small" }, ` ${r.score_label}`)) },
           { key: "threshold", label: "Threshold", align: "right", render: (r) => fmt.num(r.threshold, Math.abs(r.threshold) < 10 ? 3 : 1) },
-          { key: "alert_window_fraction", label: "Windows flagged", align: "right", render: (r) => el("span", { class: "cell-bar" }, el("span", { class: "num" }, fmt.pct(r.alert_window_fraction, r.alert_window_fraction < 0.01 ? 2 : 1)), el("span", { class: "meter" }, el("i", { style: `width:${Math.min(100, (r.alert_window_fraction / MAX_FLAGGED_SCALE) * 100)}%` }))) },
+          { key: "alert_window_fraction", label: "Windows flagged", align: "right", render: (r) => el("span", { class: "cell-bar" }, el("span", { class: "num" }, fmt.pct(r.alert_window_fraction, r.alert_window_fraction < 0.01 ? 2 : 1)), el("span", { class: "meter" }, el("i", { style: `width:${Math.min(100, (r.alert_window_fraction / MAX_FLAGGED_SCALE) * 100)}%;--i:${data.indexOf(r)}` }))) },
           { key: "events_detected", label: "Reported windows detected", render: (r) => el("span", {}, eventPills(r.detected_event_ids), el("span", { class: "muted small" }, `  ${r.events_detected} of 4`)) },
           { key: "n_alert_events", label: "Alert events", align: "right", render: (r) => fmt.int(r.n_alert_events) },
           { key: "unconfirmed_alerts_per_day", label: "Unconfirmed alerts per day", align: "right", render: (r) => fmt.num(r.unconfirmed_alerts_per_day, 1) },

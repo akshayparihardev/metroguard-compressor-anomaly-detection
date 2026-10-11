@@ -469,6 +469,27 @@ shows saved outputs. It runs no model, scores nothing, reads no raw CSV and no m
   4.29:1 against the 3:1 needed), no horizontal overflow at 375 px, keyboard focus rings, skip link, reduced-motion
   respected, interactions exercised in a browser (tooltip, zoom, reset, node selection, sorting, toggles).
 
+**UI upgrade pass (skills from `Claude Frontend Skills/`).** The five top-ranked skills (`frontend-design`,
+`design-taste-frontend`, `ui-ux-pro-max`, `web-design-guidelines`, `impeccable`) were all already present, so
+nothing was installed. Used: `frontend-design` and `impeccable` (direction, quality floor), `emil-design-eng`
+(motion rules) and the `ui-ux-pro-max` database (chart, colour and typography guidance for an anomaly dashboard;
+its script reads local CSV files only and was reviewed before running). `design-taste-frontend` was not applied
+because it excludes dashboards.
+- *Dark theme* is now an OLED ladder: page `#000000`, rail `#050506`, surfaces `#0b0c0e` / `#141518` / `#1c1d21`,
+  borders `#25262b`, brighter teal accent. Every text pair measures at least 5.98:1. The theme is set on `<html>`
+  before first paint (no flash), follows the OS until the visitor chooses, and a theme change cross-fades with the
+  View Transitions API (skipped under reduced motion). A `theme-color` meta tag follows the theme.
+- *Motion* (custom ease-out `cubic-bezier(0.23, 1, 0.32, 1)`, all under 300 ms except the one-off chart reveal):
+  press feedback (`scale(0.97)`) on every control, a sliding thumb on segmented controls that updates in place so
+  keyboard focus is kept, bars that grow in, pills that pop in sequence, smooth cross-fade between pages, a
+  skeleton while data loads. Nothing animates on keyboard-driven or high-frequency actions.
+- *Charts*: the line draws in left to right when the range changes (650 ms, ease-out-expo), hover dots on every
+  panel, diamond markers for single alert windows (shape, not just colour), a text summary per panel ("946 of 2,005
+  scored windows above threshold"), event labels on the red bands, monospace axis numerals, and keyboard inspection
+  (arrow keys, Shift for bigger steps, Home/End, Escape). This follows the database's accessibility advice for
+  anomaly charts: mark anomalies by shape and text, and make point details reachable without a mouse.
+- Re-ran the responsive sweep after the changes: 102 of 102 combinations passed.
+
 **Responsive check.** A scripted sweep loaded all six pages at 17 viewport sizes from 280 x 600 to 3440 x 1440
 (including short landscape phones and tablets) and flagged any horizontal page overflow, element outside the
 viewport, chart wider than the viewport, empty page or error banner. 102 of 102 combinations passed after one
