@@ -469,6 +469,12 @@ shows saved outputs. It runs no model, scores nothing, reads no raw CSV and no m
   4.29:1 against the 3:1 needed), no horizontal overflow at 375 px, keyboard focus rings, skip link, reduced-motion
   respected, interactions exercised in a browser (tooltip, zoom, reset, node selection, sorting, toggles).
 
+**Responsive check.** A scripted sweep loaded all six pages at 17 viewport sizes from 280 x 600 to 3440 x 1440
+(including short landscape phones and tablets) and flagged any horizontal page overflow, element outside the
+viewport, chart wider than the viewport, empty page or error banner. 102 of 102 combinations passed after one
+fix (the range control overflowed on 320 to 360 px phones). Touch screens also get larger tap targets and
+tap-to-inspect on the charts; very large screens get a wider content column and slightly larger type.
+
 **Not done.** No screen-reader pass beyond landmarks and labels, no automated visual-regression tests, and the
 site was previewed locally but not yet deployed (the repository has no remote).
 

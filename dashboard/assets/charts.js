@@ -338,7 +338,17 @@ export function createStack(container, { onZoom }) {
     });
     canvas.addEventListener("pointerleave", () => { if (dragStart == null) hide(); });
     canvas.addEventListener("pointerdown", (event) => {
-      if (event.pointerType === "touch" || event.button !== 0) return;
+      if (event.pointerType === "touch") {
+        const { minute, px, rect } = minuteAt(event, canvas, index);
+        const g = geometries[index];
+        const stackRect = stack.getBoundingClientRect();
+        if (px < g.left || px > g.left + g.plotW) { hide(); return; }
+        crosshair.style.display = "block";
+        crosshair.style.left = `${rect.left - stackRect.left + px}px`;
+        showTip(minute, event.clientX - stackRect.left, event.clientY - stackRect.top, stackRect.width);
+        return;
+      }
+      if (event.button !== 0) return;
       const { px } = minuteAt(event, canvas, index);
       dragStart = px;
       canvas.setPointerCapture(event.pointerId);

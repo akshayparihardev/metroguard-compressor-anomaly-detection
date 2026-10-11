@@ -122,7 +122,9 @@ code { background: var(--surface-2); padding: 0.1em 0.38em; border-radius: 4px; 
 .rail-foot { margin-top: auto; display: grid; gap: 0.8rem; font-size: 0.78rem; color: var(--muted); }
 .rail-foot a { color: var(--muted); }
 .main { padding: 2.2rem clamp(1.1rem, 3.2vw, 3rem) 4rem; min-width: 0; }
-.wrap { max-width: 72rem; margin: 0 auto; }
+.wrap { max-width: 82rem; margin: 0 auto; }
+@media (min-width: 112rem) { html { font-size: 106.25%; } }
+@media (min-width: 150rem) { html { font-size: 118.75%; } }
 .top { display: none; }
 
 @media (max-width: 62rem) {
@@ -151,8 +153,9 @@ p { margin: 0.7rem 0 0; max-width: 68ch; }
 
 /* ---------- controls ---------- */
 .controls { display: flex; flex-wrap: wrap; gap: 0.8rem 1.4rem; align-items: center; margin: 1.4rem 0 1rem; }
+.controls > div { max-width: 100%; }
 .control-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.45rem; }
-.seg { display: inline-flex; background: var(--surface-2); border-radius: 9px; padding: 3px; gap: 2px; }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; background: var(--surface-2); border-radius: 9px; padding: 3px; gap: 2px; }
 .seg button, .btn {
   font: inherit; font-weight: 550; color: var(--ink-2); background: transparent; border: 0; border-radius: 7px;
   min-height: 2.15rem; padding: 0 0.85rem; cursor: pointer; transition: background 0.15s var(--ease), color 0.15s var(--ease);
@@ -169,6 +172,13 @@ p { margin: 0.7rem 0 0; max-width: 68ch; }
 .chip::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 50%; border: 2px solid var(--brand); }
 .chip[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-wash); color: var(--brand-ink); }
 .chip[aria-pressed="true"]::before { background: var(--brand); }
+
+@media (max-width: 30rem) { .seg button { padding: 0 0.6rem; } }
+@media (pointer: coarse) {
+  .seg button, .btn, .chip { min-height: 2.75rem; }
+  .nav a { min-height: 2.75rem; }
+  th button { min-height: 2.75rem; }
+}
 
 /* ---------- tables ---------- */
 .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
