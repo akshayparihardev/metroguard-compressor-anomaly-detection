@@ -60,6 +60,52 @@ torch 2.9.1+cu128. Verified: `torch.cuda.is_available()` is True on the NVIDIA G
 Laptop GPU, and a float32 matrix multiply ran on it. Smart App Control was not changed.
 Models will use the GPU (CUDA) for the VAE and, where it speeds training up, the RBM.
 
+## Step 02: build features (2026-10-11)
+
+**What was done.** `pipeline/step02_build_features.py` (2.5 s, reads only the parquet cache) turned
+1,516,948 readings into 60 s windows, split them chronologically and fitted every transformation
+on `fit` windows only. Outputs in `data/processed/`: `window_features.parquet`,
+`window_standardised_features.parquet` (VAE input), `window_discrete_states.parquet` (BN input),
+`window_rbm_visible.npz` (38 binary visible units). Fitted objects in `outputs/models/`:
+`feature_standardiser.json`, `discretisation_bin_edges.json`, `motor_current_state_cut_points.json`.
+
+**Key numbers** (from `outputs/logs/step02_build_features.log`).
+- Window 60 s = 6 expected readings; a window needs at least 3 (0.5 x 6) to be usable.
+- Training period 2020-02-01 to 2020-02-28 (ends before 2020-03-01). `calib` starts 2020-02-23 12:54.
+
+| split | windows | usable | too few readings | in frozen run |
+|---|---|---|---|---|
+| fit_train | 25,581 | 25,561 | 20 | 0 |
+| fit_validation | 2,840 | 2,840 | 0 | 0 |
+| calib | 7,104 | 7,100 | 4 | 0 |
+| test | 217,195 | 206,857 | 196 | 10,146 |
+
+- Features per window: 7 analog means, std of Motor_current/TP2/TP3, 8 digital active fractions (18).
+- Fit-only constant features (scale set to 1): `Oil_level_active_fraction`,
+  `Caudal_impulses_active_fraction`.
+- Every analog feature got 3 quantile bins (no duplicate cut points, so no merging was needed).
+  RBM visible units: 10 features x 3 bins + 8 digital = 38.
+- Motor-current states from `fit` readings only: cut points 1.85 A and 4.35 A, 3 states. (The step 1
+  all-months rule gave 2.55 A and 4.35 A; the lower cut point moved because February alone was used.)
+
+**Decisions and reasons.**
+- *Split boundaries use counts of usable windows*, not calendar time: with 37.9 days of gaps in
+  the full file, 80/20 by calendar time would not give 80/20 of the data. `calib` = last 20% of usable
+  training windows, `fit_validation` = last 10% of the remaining `fit`. Models train on `fit_train`;
+  early stopping uses `fit_validation`; thresholds use `calib` only.
+- *Scaler, bin edges and motor-state cut points are fitted on `fit_train` + `fit_validation`*, never on
+  `calib` or `test`. `fit_validation` otherwise only influences early stopping, so including it in
+  these statistics is harmless; this reads "fitted on `fit`" in the spec as both fit parts.
+- *Unusable windows stay in the table* with flags (`in_frozen_run`, `too_few_readings`, `usable`)
+  instead of being deleted, so nothing is hidden. Models and evaluation must filter on `usable`.
+- *Frozen-run windows are excluded from scoring* (10,146 test windows, 4.7%). Reason: all sensors
+  repeat identical values for hours there, which looks like stuck logging, not machine behaviour.
+- *No interpolation* across gaps: windows exist only where readings exist.
+- *Motor state per window* uses the window-mean motor current. Step 6 may use raw readings for
+  transitions inside windows, as the spec says; decided there.
+- *Added `tests/test_feature_builder.py`* (not in the spec's layout list) to test windowing,
+  fit-only bins and the standardiser. 17 tests pass in total.
+
 ## Possible future work
 
 - None yet.

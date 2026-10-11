@@ -117,3 +117,11 @@ def save_readings_cache(readings: pd.DataFrame, processed_dir: Path) -> Path:
     path = cache_path(processed_dir)
     readings.to_parquet(path, index=False)
     return path
+
+
+def load_readings_cache(processed_dir: Path) -> pd.DataFrame:
+    """Read the typed readings cache written by step 1 (never re-reads the raw CSV)."""
+    path = cache_path(processed_dir)
+    if not path.is_file():
+        raise FileNotFoundError(f"{path} not found. Run pipeline/step01_audit_raw_data.py first.")
+    return pd.read_parquet(path)
