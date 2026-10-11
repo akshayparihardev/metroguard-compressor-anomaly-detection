@@ -77,7 +77,6 @@ export const fmt = {
   },
 };
 
-const darkQuery = matchMedia("(prefers-color-scheme: dark)");
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function setTheme(theme, animate) {
@@ -98,9 +97,12 @@ function storedTheme() {
   }
 }
 
+// Light is the default for every visitor; dark is only used after the visitor picks it.
 function currentTheme() {
-  return document.documentElement.dataset.theme || (darkQuery.matches ? "dark" : "light");
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
+
+const themeToggleLabel = (theme) => (theme === "dark" ? "Light theme" : "Dark theme");
 
 export function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -109,10 +111,7 @@ export function cssVar(name) {
 export function initShell(page, title, description) {
   document.title = title === "MetroGuard" ? "MetroGuard" : `${title} · MetroGuard`;
   document.querySelector(".skeleton")?.remove();
-  if (!document.documentElement.dataset.theme) setTheme(storedTheme() || (darkQuery.matches ? "dark" : "light"), false);
-  darkQuery.addEventListener("change", (event) => {
-    if (!storedTheme()) setTheme(event.matches ? "dark" : "light", true);
-  });
+  if (!document.documentElement.dataset.theme) setTheme(storedTheme() === "dark" ? "dark" : "light", false);
 
   const toggle = el(
     "button",
@@ -124,6 +123,7 @@ export function initShell(page, title, description) {
         const next = currentTheme() === "dark" ? "light" : "dark";
         setTheme(next, true);
         toggle.setAttribute("aria-pressed", String(next === "dark"));
+        toggle.textContent = themeToggleLabel(next);
         try {
           localStorage.setItem("mg-theme", next);
         } catch {
@@ -131,7 +131,7 @@ export function initShell(page, title, description) {
         }
       },
     },
-    "Dark theme",
+    themeToggleLabel(currentTheme()),
   );
 
   const rail = el(

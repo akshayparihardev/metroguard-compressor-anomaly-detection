@@ -1,5 +1,7 @@
 # Dashboard
 
+Live: <https://metroguard-compressor-anomaly-detec.vercel.app>
+
 A read-only static site that displays the results the pipeline already saved. It runs no model, reads no raw
 data and has no build step: plain HTML, CSS and JavaScript.
 
@@ -38,6 +40,6 @@ the build and output settings empty.
 
 ## Notes
 
-- Light and dark themes follow the operating system until the visitor picks one.
+- Opens in the light theme; the sidebar button switches to the pure-black dark theme and the choice is remembered.
 - Alerts are marked by shape and by a text summary as well as colour; charts can be inspected with the keyboard.
 - Motion respects `prefers-reduced-motion`.
