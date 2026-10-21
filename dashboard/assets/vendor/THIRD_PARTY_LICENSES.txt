@@ -1,7 +1,15 @@
-Third-party libraries, loaded only when a visitor uploads that file type.
+Third-party libraries, served unmodified from their npm packages.
 
-xlsx.mini.min.js   SheetJS Community Edition 0.20.3 (https://sheetjs.com), Apache License 2.0
-pdf.min.mjs        pdf.js 4.10.38 (Mozilla, https://mozilla.github.io/pdf.js), Apache License 2.0
-pdf.worker.min.mjs pdf.js 4.10.38 worker, Apache License 2.0
+File reading (loaded only when a visitor chooses that file type)
+xlsx.mini.min.js    SheetJS Community Edition 0.20.3 (https://sheetjs.com), Apache License 2.0
+pdf.min.mjs         pdf.js 4.10.38 (Mozilla, https://mozilla.github.io/pdf.js), Apache License 2.0
+pdf.worker.min.mjs  pdf.js 4.10.38 worker, Apache License 2.0
 
-Full licence text: https://www.apache.org/licenses/LICENSE-2.0
+Motion and 3-D
+gsap.min.js         GSAP 3.12.5 (https://gsap.com), GreenSock standard "no charge" licence (https://gsap.com/standard-license)
+ScrollTrigger.min.js GSAP ScrollTrigger 3.12.5, same licence
+three.module.min.js three.js 0.169.0 (https://threejs.org), MIT License
+OrbitControls.js    three.js 0.169.0 examples/jsm/controls, MIT License
+lottie_light.min.js lottie-web 5.12.2 light player (https://github.com/airbnb/lottie-web), MIT License
+
+Full licence texts: https://www.apache.org/licenses/LICENSE-2.0 and https://opensource.org/license/mit
