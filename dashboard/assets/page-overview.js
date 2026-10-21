@@ -1,5 +1,6 @@
 import { compact, el, eventIds, fmt, footer, initShell, isUpload, loadJSON, showError } from "./app.js";
 import { lineMap } from "./linemap.js";
+import { animateJourney } from "./motion.js";
 
 // The overview tells the whole method as one journey, from the raw file to the result, in plain words.
 // Every number comes from dashboard/data; the small pictures are explanations, not data.
@@ -73,7 +74,7 @@ function splitPicture(counts, upload) {
   const scale = 100 / raw.reduce((a, b) => a + b, 0);
   return el("div", { class: "split-bar", role: "img", "aria-label": parts.map(([, n, label]) => `${label}: ${fmt.int(n)} windows`).join("; ") },
     parts.map(([key, n, label], i) => el("div", { class: `split-part ${key}`, style: `flex-basis:${raw[i] * scale}%` },
-      el("b", {}, label), el("span", { class: "num" }, `${fmt.int(n)} windows`))));
+      el("b", {}, label), el("span", { class: "num", "data-count": "" }, `${fmt.int(n)} windows`))));
 }
 
 function thresholdPicture() {
@@ -90,7 +91,7 @@ function thresholdPicture() {
 }
 
 function step(n, id, title, { what, why, concept, result, extra }) {
-  return el("section", { class: "journey-step reveal", id },
+  return el("section", { class: "journey-step", id },
     el("div", { class: "journey-marker", "aria-hidden": "true" }, el("span", {}, String(n))),
     el("div", { class: "journey-body" },
       el("h2", {}, title),
@@ -205,7 +206,7 @@ try {
       concept: "Bayesian network (structure learning, Markov blanket)",
     }),
 
-    el("section", { class: "journey-step reveal final", id: "result" },
+    el("section", { class: "journey-step final", id: "result" },
       el("div", { class: "journey-marker", "aria-hidden": "true" }, el("span", {}, "✓")),
       el("div", { class: "journey-body" },
         el("h2", {}, "Result"),
@@ -214,7 +215,7 @@ try {
           el("div", { class: "verdict-head" }, el("span", {}, "Detector"), el("span", {}, "Share of test time with an alert"), ids.length ? el("span", {}, upload ? "Problems caught" : "Leaks caught") : null),
           families.map((f, i) => el("div", { class: `verdict-row${f === selective && ids.length ? " best" : ""}` },
             el("div", {}, el("b", {}, f.name)),
-            el("div", { class: "verdict-bar" }, el("span", { class: "meter" }, el("i", { style: `width:${Math.max(1.5, (f.hi / scale) * 100)}%;--i:${i}` })), el("b", { class: "num" }, f.label)),
+            el("div", { class: "verdict-bar" }, el("span", { class: "meter" }, el("i", { style: `width:${Math.max(1.5, (f.hi / scale) * 100)}%;--i:${i}` })), el("b", { class: "num", "data-count": "" }, f.label)),
             ids.length ? el("div", { class: "verdict-caught num" }, el("b", {}, `${f.detected} of ${ids.length}`)) : null,
           )),
         ),
@@ -249,6 +250,7 @@ try {
     footer(context),
   ));
   lineMap(document.getElementById("linemap"), timeline, { trainingLabel: upload ? "Learning period" : "Learning month" });
+  animateJourney(wrap).catch(() => {});
 } catch (error) {
   initShell("index.html", "MetroGuard");
   showError(error);
