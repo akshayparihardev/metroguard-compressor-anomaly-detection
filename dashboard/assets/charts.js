@@ -150,7 +150,7 @@ function summarise(panel, spec) {
     if (ys[i] > panel.threshold) above += 1;
   }
   return scored
-    ? `${fmt.int(above)} of ${fmt.int(scored)} scored ${spec.unit} above threshold (${fmt.pct(above / scored, 0)})`
+    ? `${fmt.int(above)} of ${fmt.int(scored)} scored ${spec.unit} above the alert line (${fmt.pct(above / scored, 0)})`
     : "no scored data in this range";
 }
 
@@ -224,7 +224,7 @@ function drawPanel(ctx, width, height, panel, spec, isLast, reveal) {
       ctx.fillStyle = c.fail;
       ctx.textAlign = "left";
       ctx.textBaseline = "bottom";
-      ctx.fillText(`Event ${w.event}`, a + 4, bottom - 4);
+      ctx.fillText(`${spec.windowLabel} ${w.event}`, a + 4, bottom - 4);
     }
   }
   for (const m of spec.markers ?? []) {
@@ -305,7 +305,7 @@ function drawPanel(ctx, width, height, panel, spec, isLast, reveal) {
     ctx.lineTo(width - right, ty);
     ctx.stroke();
     ctx.setLineDash([]);
-    const label = `${spec.thresholdLabel} threshold`;
+    const label = spec.thresholdLabel;
     ctx.font = `10.5px ${c.font}`;
     const textW = ctx.measureText(label).width;
     ctx.fillStyle = c.surface;
@@ -337,7 +337,7 @@ export function createStack(container, { onZoom }) {
     const width = stack.clientWidth;
     spec.panels.forEach((panel, index) => {
       const isLast = index === spec.panels.length - 1;
-      const height = isLast ? 178 : 152;
+      const height = spec.panels.length === 1 ? 300 : isLast ? 178 : 152;
       const summary = summarise(panel, spec);
       const canvas = el("canvas", { role: "img", tabindex: "0", "aria-label": `${panel.label}, ${panel.sub}. ${summary}. Use the left and right arrow keys to inspect values.` });
       const dot = el("div", { class: "dot" });
@@ -463,7 +463,7 @@ export function createStack(container, { onZoom }) {
     tip.replaceChildren(
       el("b", {}, fmt.dateTime(Math.round(minute))),
       ...rows.map(({ panel, value }) =>
-        el("div", { class: "row" }, el("span", {}, panel.label), el("span", { class: value != null && value > panel.threshold ? "over" : "" }, value == null ? "no data" : `${formatValue(value)}${value > panel.threshold ? " ◆" : ""}`)),
+        el("div", { class: "row" }, el("span", {}, panel.label), el("span", { class: value != null && value > panel.threshold ? "over" : "" }, value == null ? "no data" : `${formatValue(value)}${value > panel.threshold ? " · alert" : " · below line"}`)),
       ),
     );
     tip.style.display = "block";

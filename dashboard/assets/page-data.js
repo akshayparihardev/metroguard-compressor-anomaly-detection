@@ -17,7 +17,7 @@ try {
   const { wrap } = initShell(
     "data.html",
     "The data",
-    `What the ${upload ? "uploaded" : "raw"} file contains, where it is incomplete, and how the RBM and the VAE behaved while training.`,
+    `What is inside the ${upload ? "uploaded" : "raw"} file, where it has holes, and how the two neural networks learned.`,
   );
   const days = audit.span.split(" ")[0];
   const spike = training.vae.train_loss.reduce((best, v, i) => (v > best.v ? { v, i } : best), { v: -Infinity, i: 0 });
@@ -40,7 +40,7 @@ try {
       : `The source documentation states two different sampling rates (1 Hz in one place, 0.1 Hz in another). The file itself shows one reading every ${audit.cadence_seconds} s, with 9 to 13 s jitter. Timestamps carry no timezone; this project assumes the timestamps and the failure reports share the same local time.`),
     upload && context.source.notes.length ? el("div", { class: "note" }, context.source.notes.map((n) => el("p", {}, n))) : null,
 
-    el("h2", {}, "Gaps and frozen stretches"),
+    el("h2", {}, "Missing data and stuck sensors"),
     el("div", { class: "grid-2" },
       el("div", {}, plainTable({
         caption: "How the time steps are classified",
@@ -67,7 +67,7 @@ try {
         })
       : null,
 
-    nWindows ? el("h2", {}, upload ? `The ${plural(nWindows, "reported window")}` : "The four reported windows") : null,
+    nWindows ? el("h2", {}, upload ? `The ${plural(nWindows, "reported window")}` : "How much data exists inside each leak") : null,
     nWindows ? plainTable({
       caption: "Coverage of each reported window in the file",
       note: upload ? "The windows you entered, inclusive at both ends." : "The windows are company-reported intervals, not row-by-row labels. Inclusive at both ends.",
@@ -84,7 +84,7 @@ try {
       rows: audit.event_coverage,
     }) : null,
 
-    audit.digital.length ? el("h2", {}, "Digital signals") : null,
+    audit.digital.length ? el("h2", {}, "On/off switches") : null,
     audit.digital.length
       ? el("p", {}, upload
           ? `${plural(audit.digital.length, "on/off signal")}. A signal that is almost always on or almost always off gives a model little to learn from.`
@@ -112,7 +112,7 @@ try {
         })
       : null,
 
-    stateColumn ? el("h2", {}, upload ? `Operating states of ${stateColumn}` : "Motor current") : null,
+    stateColumn ? el("h2", {}, upload ? `Operating states of ${stateColumn}` : "Motor states (used by the Markov chain)") : null,
     stateColumn
       ? el("p", {}, upload
           ? `The Markov chain follows ${stateColumn} through ${plural(audit.motor_states.length, "operating state")}, with boundaries found from the training period alone. The table applies the same rule to the full record.`
@@ -131,7 +131,14 @@ try {
         })
       : null,
 
-    el("h2", {}, "Training curves"),
+    el("h2", {}, "How the neural networks learned"),
+    el("div", { class: "how-to" },
+      el("b", {}, "How to read these charts"),
+      el("ul", { class: "glossary" },
+        el("li", {}, "Left to right: training rounds (epochs). In each round the model sees all the learning windows once."),
+        el("li", {}, "A line going down means the model is getting better at describing normal data."),
+        el("li", {}, "Solid line: the windows it learns from. Dashed line: held-out windows it never learns from, to check it is not just memorising."),
+      )),
     el("h3", {}, "RBM, trained with contrastive divergence"),
     el("p", {}, upload
       ? `Reconstruction error and mean free energy for k = ${kValues.join(", ")}, ${rbmEpochs.length} epochs. Solid lines are the training windows, dashed lines the held-out validation windows. Curves still falling at the last epoch mean the RBMs could have trained longer.`

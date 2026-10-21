@@ -640,6 +640,25 @@ menu now uses everyday names (Timeline, Results table, Sensor links, The data, H
 the detailed pages are unchanged. Every number is still read from `dashboard/data`, and the honest framing stays
 (catching all four leaks is easy for a detector that alerts often; "unusual" is not "broken").
 
+## Every page explained step by step (2026-10-21)
+
+The author still could not follow the site: windows were never explained, the flow from the raw file to the result
+was missing, and it was unclear which concept was used where. Changes, all wording and layout (no number or method
+changed):
+- **Overview** is now one numbered journey with a sticky step bar: get the data (MetroPT-3, what the 15 sensors
+  measure), check it (37.9 days missing, 7 stuck stretches), make 1-minute windows (a small picture: 6 readings
+  become one window; 1,516,948 readings become 242,358 usable windows), split by time like an exam (28,347 learn /
+  7,154 alert line / 206,857 test windows), score every window (the four detectors in one sentence each, with the
+  concept named), draw the alert line (a small picture), compare with the four leaks, explain alerts (Bayesian
+  network: Towers and MPG were the odd signals), and the result. Each step states what, why, the concept and the
+  result. The split counts are summed from the committed timeline coverage, so nothing new is typed in.
+- **Timeline** shows one detector at a time with plain controls (Detector, Show, Alert line: normal or stricter), a
+  "how to read the chart" box, a taller chart, and for each leak a "Did each detector catch it?" table with times
+  like "23.9 h before it started".
+- **Results table**, **Sensor links** and **The data** got plain headings, a box that explains the columns or the
+  charts, simpler table columns on the alert explanation, and the independence checks folded into a "Technical
+  checks" section.
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train

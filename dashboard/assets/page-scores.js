@@ -1,10 +1,25 @@
 import { createStack } from "./charts.js";
 import { compact, el, eventIds, fmt, footer, initShell, isUpload, loadJSON, plainTable, segmented, showError } from "./app.js";
 
-const DEFAULT_MODELS = ["zscore_baseline", "rbm_k5", "vae", "markov_state_model"];
-const PERCENTILES = [["99", "99th"], ["99.5", "99.5th"]];
+// One detector at a time, in plain words: the score over time, the alert line, and the reported windows.
+
+const DETECTORS = [
+  ["zscore_baseline", "Simple statistics"],
+  ["rbm_k5", "RBM"],
+  ["vae", "VAE"],
+  ["markov_state_model", "Markov chain"],
+];
 const EVENT_PAD_BEFORE_MINUTES = 180;
 const EVENT_PAD_AFTER_MINUTES = 720;
+
+const plainName = (id, fallback) => DETECTORS.find(([d]) => d === id)?.[1] ?? fallback;
+
+function delayText(hours) {
+  if (hours == null) return "no alert";
+  const h = Math.abs(hours);
+  const amount = h < 1 ? `${Math.round(h * 60)} min` : `${h.toFixed(1)} h`;
+  return hours <= 0 ? `${amount} before it started` : `${amount} after it started`;
+}
 
 try {
   const [context, timeline, metrics, audit] = await Promise.all([
@@ -12,19 +27,20 @@ try {
   ]);
   const upload = isUpload(context);
   const ids = eventIds(context);
+  const leak = upload ? "Problem" : "Leak";
   const { wrap } = initShell(
     "scores.html",
     "Timeline",
-    `Each panel is one model's anomaly score. Orange marks scores above the threshold fixed on the ${upload ? "training period" : "training month"}${ids.length ? ", and red bands are the reported failure windows" : ""}.`,
+    "Pick a detector. The line is its score for each moment: the higher, the more unusual. When the line goes above the dashed alert line, that moment is an alert.",
   );
 
+  const available = timeline.models.map((m) => m.id);
+  const detectors = DETECTORS.filter(([id]) => available.includes(id));
+  const choices = detectors.length ? detectors : timeline.models.map((m) => [m.id, m.label]);
   const params = new URLSearchParams(location.search);
   const startEvent = Number(params.get("event"));
-  const available = timeline.models.map((m) => m.id);
-  const preferred = DEFAULT_MODELS.filter((id) => available.includes(id));
-  const bucket = { 60: "hourly", 1440: "daily" }[timeline.step_minutes] ?? `per-${fmt.windowLength(timeline.step_minutes * 60).replace(" ", "-")}`;
   const state = {
-    models: new Set(preferred.length >= 2 ? preferred : available.slice(0, 4)),
+    model: choices[0][0],
     percentile: "99",
     range: ids.includes(startEvent) ? startEvent : "full",
     zoom: null,
@@ -35,11 +51,9 @@ try {
     return eventCache.get(n);
   };
 
-  const controls = el("div", { class: "controls" });
   const chartHost = el("div");
   const facts = el("div");
   const hint = el("p", { class: "muted small" });
-  const full = timeline.models;
   const stack = createStack(chartHost, {
     onZoom: (a, b) => {
       state.zoom = a == null ? null : [a, b];
@@ -47,117 +61,96 @@ try {
     },
   });
 
-  const rangeOptions = [["full", "Full record"], ...ids.map((n) => [n, `Event ${n}`])];
-
-  const chipButtons = full.map((m) =>
-    el("button", {
-      class: "chip", type: "button", "aria-pressed": String(state.models.has(m.id)),
-      onclick: () => {
-        if (state.models.has(m.id)) { if (state.models.size > 1) state.models.delete(m.id); }
-        else state.models.add(m.id);
-        chipButtons.forEach((b, i) => b.setAttribute("aria-pressed", String(state.models.has(full[i].id))));
-        draw(false);
-      },
-    }, m.label),
-  );
-  controls.append(...compact(
-    ids.length ? segmented({ label: "Range", options: rangeOptions, value: state.range, onChange: (v) => { state.range = v; state.zoom = null; draw(true); } }) : null,
-    segmented({ label: "Threshold", options: PERCENTILES, value: state.percentile, onChange: (v) => { state.percentile = v; draw(false); } }),
-    el("div", { class: "chips", role: "group", "aria-label": "Models shown" }, chipButtons),
+  const controls = el("div", { class: "controls" }, ...compact(
+    segmented({ label: "Detector", options: choices, value: state.model, onChange: (v) => { state.model = v; draw(true); } }),
+    ids.length ? segmented({ label: "Show", options: [["full", "Whole record"], ...ids.map((n) => [n, `${leak} ${n}`])], value: state.range, onChange: (v) => { state.range = v; state.zoom = null; draw(true); } }) : null,
+    segmented({ label: "Alert line", options: [["99", "Normal"], ["99.5", "Stricter"]], value: state.percentile, onChange: (v) => { state.percentile = v; draw(false); } }),
   ));
 
-  const thresholdOf = (series, model) => (state.percentile === "99" ? series.threshold_p99 : series.threshold_p99_5) ?? model.threshold_p99;
+  const howTo = el("div", { class: "how-to" },
+    el("b", {}, "How to read the chart"),
+    el("ul", {},
+      el("li", {}, el("i", { class: "sw-line" }), "Teal line: the detector's score. Up = more unusual."),
+      el("li", {}, el("i", { class: "sw-dash" }), "Dashed line: the alert line, fixed before the test months."),
+      el("li", {}, el("i", { class: "sw-alert" }), "Orange: the score is above the line, so it is an alert."),
+      ids.length ? el("li", {}, el("i", { class: "sw-fail" }), `Red band: a reported ${leak.toLowerCase()}.`) : null,
+    ),
+  );
 
   async function draw(animate = false) {
-    const shown = full.filter((m) => state.models.has(m.id));
-    const base = {
-      windows: timeline.windows,
-      thresholdLabel: `p${state.percentile}`,
-    };
+    const model = timeline.models.find((m) => m.id === state.model);
+    const name = plainName(model.id, model.label);
+    const threshold = (series) => (state.percentile === "99" ? series.threshold_p99 : series.threshold_p99_5) ?? model.threshold_p99;
+    const base = { windows: timeline.windows, windowLabel: leak, thresholdLabel: "alert line" };
     let spec;
     if (state.range === "full") {
       const total = timeline.coverage.length;
       const xs = Array.from({ length: total }, (_, i) => timeline.start_minute + i * timeline.step_minutes);
+      const per = timeline.step_minutes === 60 ? "hour" : fmt.windowLength(timeline.step_minutes * 60);
       spec = {
         ...base,
         mode: "hourly",
         unit: timeline.step_minutes === 60 ? "hours" : "periods",
         xMin: state.zoom?.[0] ?? xs[0],
         xMax: state.zoom?.[1] ?? xs[total - 1],
-        markers: [{ minute: timeline.test_start_minute, label: "Test period begins", colour: "ink", dash: [5, 4] }],
-        panels: shown.map((m, i) => ({
-          label: m.label, sub: `${m.score_label}, ${bucket} maximum`, scale: m.scale, showMarkerLabels: i === 0,
-          threshold: state.percentile === "99" ? m.threshold_p99 : m.threshold_p99_5,
-          series: { xs, ys: m.values },
-        })),
+        markers: [{ minute: timeline.test_start_minute, label: `Test starts (${upload ? "learning period" : "February"} is on the left)`, colour: "ink", dash: [5, 4] }],
+        panels: [{ label: name, sub: `highest score in each ${per}`, scale: model.scale, showMarkerLabels: true, threshold: threshold(model), series: { xs, ys: model.values } }],
       };
-      hint.textContent = `${bucket[0].toUpperCase()}${bucket.slice(1)} maximum of the window scores (display only; metrics use every window). Drag across a chart to zoom, double-click to reset. Keyboard: focus a chart and use the arrow keys (Shift for bigger steps).`;
+      hint.textContent = "Tip: drag across the chart to zoom in, double-click to zoom out. Hover to see the exact value.";
     } else {
       const event = await loadEvent(state.range);
+      const series = event.series.find((s) => s.id === model.id);
       spec = {
         ...base,
         mode: "window",
         unit: "windows",
         xMin: state.zoom?.[0] ?? event.lead_start_minute - EVENT_PAD_BEFORE_MINUTES,
         xMax: state.zoom?.[1] ?? event.end_minute + EVENT_PAD_AFTER_MINUTES,
-        markers: [{ minute: event.lead_start_minute, label: `${context.lead_tolerance_hours} h lead range begins`, colour: "ink", dash: [3, 4] }],
-        panels: shown.map((m, i) => {
-          const series = event.series.find((s) => s.id === m.id);
-          return {
-            label: m.label, sub: `${m.score_label}, every ${fmt.windowLength(context.window_seconds)} window`, scale: m.scale, showMarkerLabels: i === 0,
-            threshold: thresholdOf(series, m), series: { xs: series.minutes, ys: series.values },
-          };
-        }),
+        markers: [{ minute: event.lead_start_minute, label: `${context.lead_tolerance_hours} h before the ${leak.toLowerCase()}: alerts from here count`, colour: "ink", dash: [3, 4] }],
+        panels: [{ label: name, sub: `score of every ${fmt.windowLength(context.window_seconds)} window`, scale: model.scale, showMarkerLabels: true, threshold: threshold(series), series: { xs: series.minutes, ys: series.values } }],
       };
-      hint.textContent = `Every ${fmt.windowLength(context.window_seconds)} window around the reported window. Orange dots are alert windows. Blank stretches are gaps or frozen data that were not scored. Keyboard: focus a chart and use the arrow keys.`;
+      hint.textContent = "Gaps in the line are times with no usable data. Drag to zoom, double-click to zoom out.";
     }
     stack.render(spec, { animate });
     paintFacts();
   }
 
   function paintFacts() {
+    const rows = metrics.rows.filter((r) => r.is_primary_score && r.percentile === Number(state.percentile));
     if (state.range === "full") {
+      const row = rows.find((r) => r.model === state.model);
       facts.replaceChildren(
         el("div", { class: "note" },
-          el("p", {}, upload
-            ? `The training period is on the left of the dashed line. A score that stays high after it means the later data differs from the training period for that model, which is not the same as every later window being abnormal.${ids.length ? " Open an event to see its scores window by window." : ""}`
-            : "The training month is on the left of the dashed line. Scores jump after it for most models because the later months differ from the training month, not because every later window is abnormal. Open an event to see its scores window by window.")),
+          el("p", {}, el("strong", {}, "What this shows. "), row ? `In the test months, ${plainName(row.model, row.model_label)} was above the alert line ${fmt.pct(row.alert_window_fraction, row.alert_window_fraction < 0.01 ? 2 : 1)} of the time, although the line was set so that normal data crosses it only ${state.percentile === "99" ? "1%" : "0.5%"} of the time.` : "",
+            upload
+              ? " A score that stays high after the learning period means the later data differs from it, which is not the same as every later moment being abnormal."
+              : " Most detectors stay high after February because the later months simply look different, not because every later minute is broken."),
+          ids.length ? el("p", {}, `Pick a ${leak.toLowerCase()} above to zoom into it.`) : null,
+        ),
       );
       return;
     }
     const w = timeline.windows.find((x) => x.event === state.range);
     const cover = audit.event_coverage.find((c) => c.event === state.range);
-    const rows = metrics.rows.filter((r) => r.is_primary_score && r.percentile === Number(state.percentile));
     facts.replaceChildren(
-      el("h2", {}, `Event ${w.event}: ${fmt.dateTime(w.start_minute)} to ${fmt.dateTime(w.end_minute)}`),
-      el("p", {}, `Reported issue: ${w.issue.toLowerCase()}. ${w.maintenance_note !== "-" ? `Maintenance note as published: “${w.maintenance_note}”.` : "No maintenance note was published for this event."} The file holds ${fmt.int(cover.readings)} readings inside the window (${cover.coverage_percent}% of one every ${audit.cadence_seconds} s); the longest silent stretch inside it is ${fmt.seconds(cover.largest_gap_seconds)}.`),
+      el("h2", {}, `${leak} ${w.event}: ${fmt.dateTime(w.start_minute)} to ${fmt.dateTime(w.end_minute)}`),
+      el("p", {}, `${upload ? "Reported" : "Reported issue"}: ${w.issue.toLowerCase()}. ${w.maintenance_note !== "-" ? `Maintenance note: “${w.maintenance_note}”. ` : ""}${cover.coverage_percent >= 99 ? "Data was recorded through the whole window." : `Data covers ${cover.coverage_percent}% of this window.`}`),
       plainTable({
-        caption: `Detection at the ${state.percentile}th percentile`,
-        note: "Delay is clipped to the start of the lead range (see Metrics).",
+        caption: `Did each detector catch ${leak.toLowerCase()} ${w.event}?`,
+        note: `Caught = an alert during the ${leak.toLowerCase()} or up to ${context.lead_tolerance_hours} h before it. The first alert time is counted from the reported start.`,
         columns: [
-          { label: "Model", render: (r) => el("b", {}, r.model_label) },
-          { label: "Detected", render: (r) => (r.detected_event_ids.split(";").includes(String(w.event)) ? el("span", { class: "tag ok" }, "yes") : el("span", { class: "tag warn" }, "no")) },
-          { label: "Delay", align: "right", render: (r) => fmt.hours(r[`delay_hours_event${w.event}`]) },
-          { label: "Windows flagged overall", align: "right", render: (r) => fmt.pct(r.alert_window_fraction, r.alert_window_fraction < 0.01 ? 2 : 1) },
+          { label: "Detector", render: (r) => el("b", {}, plainName(r.model, r.model_label)) },
+          { label: "Caught?", render: (r) => (r.detected_event_ids.split(";").includes(String(w.event)) ? el("span", { class: "tag ok" }, "yes") : el("span", { class: "tag warn" }, "no")) },
+          { label: "First alert", render: (r) => delayText(r[`delay_hours_event${w.event}`]) },
+          { label: "Alerts overall (test months)", align: "right", render: (r) => fmt.pct(r.alert_window_fraction, r.alert_window_fraction < 0.01 ? 2 : 1) },
         ],
         rows,
       }),
+      el("p", { class: "muted small" }, `An alert ${context.lead_tolerance_hours} h early is not a prediction: a detector that alerts often will usually have one running already.`),
     );
   }
 
-  wrap.append(
-    controls,
-    el("div", { class: "legend" },
-      el("span", {}, el("i", { class: "sw-line" }), "Score below threshold"),
-      el("span", {}, el("i", { class: "sw-alert" }), "Score above threshold (diamonds mark single windows)"),
-      el("span", {}, el("i", { class: "sw-dash" }), "Frozen threshold"),
-      ids.length ? el("span", {}, el("i", { class: "sw-fail" }), "Reported failure window") : null,
-    ),
-    chartHost,
-    hint,
-    facts,
-    footer(context),
-  );
+  wrap.append(controls, howTo, chartHost, hint, facts, footer(context));
   await draw(true);
 } catch (error) {
   initShell("scores.html", "Timeline");

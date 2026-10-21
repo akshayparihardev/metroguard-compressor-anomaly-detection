@@ -36,7 +36,7 @@ try {
   const { wrap } = initShell(
     "network.html",
     "Sensor links",
-    `A network of sensor states learned on the ${upload ? "training period" : "training month"} only. Arrows are statistical dependencies, not causes, and some directions are arbitrary.`,
+    `Each circle is a sensor. A line between two circles means their values tend to move together in ${upload ? "the learning period" : "February"}, so knowing one helps guess the other. It does not mean one causes the other. Click a circle to see its closest neighbours.`,
   );
 
   const { nodes, edges } = network;
@@ -88,7 +88,7 @@ try {
             el("p", {}, `Parents: ${info.parents.map(short).join(", ") || "none"}.`),
             el("p", {}, `Children: ${info.children.map(short).join(", ") || "none"}.`),
             el("p", { class: "muted small" }, `Markov blanket (${info.blanket.size} nodes): the variables that, once known, make this one independent of the rest.`))
-        : el("div", { class: "note" }, el("p", {}, "Select a node to see its parents, children and Markov blanket. Teal outlines are analog sensors; grey outlines are digital signals.")),
+        : el("div", { class: "note" }, el("p", {}, "Click a circle to highlight the sensors it is directly linked to. Teal circles are measurements (pressure, temperature, current); grey ones are on/off switches. The arrow direction has no meaning on its own.")),
     );
   }
 
@@ -97,7 +97,7 @@ try {
   const eventNames = alert.events.map((e) => e.heading.split(":")[0].toLowerCase());
   const demonstration = demo
     ? [
-        el("h2", {}, "What the network predicts"),
+        el("h2", {}, "Example: knowing one sensor tells you about another"),
         el("p", {}, upload
           ? `The strongest learned dependency (mutual information ${fmt.num(demo.mutual_information, 3)} nats) is between ${short(demo.parent)} and ${short(demo.child)}. The two tables read the same dependency in both directions: knowing either state shifts the probabilities of the other.`
           : `The strongest learned dependency (mutual information ${fmt.num(demo.mutual_information, 3)} nats) is between ${short(demo.parent)} and ${short(demo.child)}. They are two pressure measurements on the same circuit, so each state of one almost fixes the state of the other, in either direction.`),
@@ -106,11 +106,13 @@ try {
           el("div", {}, conditionalTable(demo.evidential_heading, demo.evidential_table)),
         ),
 
-        el("h2", {}, "Independence checks"),
-        el("p", {}, "The three local-independence cases and the three d-separation patterns, evaluated on the learned graph."),
-        el("div", { class: "grid-2" },
-          el("div", {}, el("h3", {}, "Local independence"), el("ul", { class: "list" }, demo.local_independence.map((t) => el("li", {}, t.replace(/\*\*/g, ""))))),
-          el("div", {}, el("h3", {}, "Chain, fork and collider"), el("ul", { class: "list" }, demo.d_separation.map((t) => el("li", {}, t.replace(/connected/g, "d-connected"))))),
+        el("details", { class: "technical" },
+          el("summary", {}, "Technical checks: independence and d-separation"),
+          el("p", {}, "The three local-independence cases and the three d-separation patterns, evaluated on the learned graph."),
+          el("div", { class: "grid-2" },
+            el("div", {}, el("h3", {}, "Local independence"), el("ul", { class: "list" }, demo.local_independence.map((t) => el("li", {}, t.replace(/\*\*/g, ""))))),
+            el("div", {}, el("h3", {}, "Chain, fork and collider"), el("ul", { class: "list" }, demo.d_separation.map((t) => el("li", {}, t.replace(/connected/g, "d-connected"))))),
+          ),
         ),
       ]
     : [el("div", { class: "note" }, el("p", {}, "The structure search found no dependency between the variables in the training period, so there is no query or independence check to show."))];
@@ -133,28 +135,27 @@ try {
 
     ...demonstration,
 
-    el("h2", {}, upload ? "What the network says about the alerts" : "What the network says about two alerts"),
+    el("h2", {}, upload ? "Which sensors looked odd during the alerts" : "Which sensors looked odd during the leaks"),
     alert.events.length
-      ? el("p", {}, `For the alert events the ${context.model_labels[alert.model]} raised ${!upload ? "inside reported windows 1 and 2" : context.windows.length ? `inside ${eventNames.join(" and ")}` : "with the highest peak scores"}, each variable's observed state was scored by how unlikely it is given the variables around it. The column "share above calibration p95" is the fraction of event windows more surprising than the 95th percentile of the ${upload ? "training period's" : "training month's"} calibration windows; a variable is marked unusual when that share is more than twice what chance would give (5%).`)
+      ? el("p", {}, `We took the alerts that the ${context.model_labels[alert.model]} raised ${!upload ? "during leaks 1 and 2" : context.windows.length ? `during ${eventNames.join(" and ")}` : "with the highest scores"}. For every minute of those alerts, the network asks each sensor: given what your linked neighbours show, how surprising is your state? A sensor is marked unusual when it was surprising (more than in 95% of normal minutes) at least twice as often as chance would give.`)
       : el("div", { class: "note" }, el("p", {}, `The ${context.model_labels[alert.model]} raised no alert event ${context.windows.length ? "inside a reported window" : "in the test period"}, so there is no alert to examine.`)),
     ...alert.events.flatMap((event) => [
-      el("h3", {}, event.heading.replace(/^Reported window (\d+): alert event (.+) to (.+) \((\d+) usable windows\)$/, (m, n, a, b, w) => `Reported window ${n}: alert event ${a} to ${b} (${w} usable windows)`)),
+      el("h3", {}, event.heading.replace(/^Reported window (\d+): alert event (.+) to (.+) \((\d+) usable windows\)$/, (m, n, a, b, w) => `${upload ? "Problem" : "Leak"} ${n}: alert from ${a.slice(0, 16)} to ${b.slice(0, 16)} (${fmt.int(Number(w))} minutes)`)),
       plainTable({
         columns: [
-          { label: "Variable", render: (r) => el("b", {}, short(r.variable)) },
-          { label: "Event mean", align: "right", render: (r) => fmt.num(r.event_mean, 4) },
-          { label: "Calibration mean", align: "right", render: (r) => fmt.num(r.calib_mean, 4) },
-          { label: "Calibration p95", align: "right", render: (r) => fmt.num(r.calib_p95, 4) },
-          { label: "Share above calibration p95", align: "right", render: (r) => fmt.pct(r.share_above_calib_p95) },
-          { label: "Unusual", render: (r) => (r.unusual === "yes" ? el("span", { class: "tag warn" }, "unusual") : el("span", { class: "muted" }, "no")) },
+          { label: "Sensor", render: (r) => el("b", {}, short(r.variable)) },
+          { label: "Surprise during the alert", align: "right", render: (r) => fmt.num(r.event_mean, 2) },
+          { label: "Surprise in normal minutes", align: "right", render: (r) => fmt.num(r.calib_mean, 2) },
+          { label: "Alert minutes that were very surprising", align: "right", render: (r) => fmt.pct(r.share_above_calib_p95) },
+          { label: "Unusual?", render: (r) => (r.unusual === "yes" ? el("span", { class: "tag warn" }, "unusual") : el("span", { class: "muted" }, "no")) },
         ],
         rows: event.table,
       }),
     ]),
     alert.events.length
       ? el("p", { class: "muted small" }, upload
-          ? "Values are −log P(state | Markov blanket) in nats. This describes association with the alert, not a cause."
-          : "Values are −log P(state | Markov blanket) in nats. The flagged variables are digital compressor signals and the effects are small in absolute terms. This describes association with the alert, not a cause.")
+          ? "Surprise is −log P(state | linked neighbours), in nats: higher means less expected. It shows what was odd during the alert, not what caused it."
+          : "Surprise is −log P(state | linked neighbours), in nats: higher means less expected. The odd sensors were on/off signals of the compressor, and the differences are small. It shows what was odd during the alert, not what caused it.")
       : null,
     footer(context),
   ));

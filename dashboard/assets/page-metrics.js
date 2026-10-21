@@ -1,6 +1,6 @@
 import { compact, el, eventIds, eventPills, fmt, footer, initShell, isUpload, loadJSON, plainTable, segmented, showError, sortableTable } from "./app.js";
 
-const SETS = [["primary", "Primary scores"], ["secondary", "Secondary scores"], ["all", "All scores"]];
+const SETS = [["primary", "Main score"], ["secondary", "Second score"], ["all", "Both"]];
 const MAX_FLAGGED_SCALE = 0.25;
 
 try {
@@ -11,7 +11,7 @@ try {
   const { wrap } = initShell(
     "metrics.html",
     "Results table",
-    `Event-level results on ${fmt.int(metrics.n_usable_test_windows)} usable test windows (${fmt.num(metrics.test_days, upload ? 1 : 0)} calendar days). Thresholds were fitted on the ${trainingPeriod} and frozen before each model scored test windows.`,
+    `Every number behind the overview. Each row is one detector on the ${fmt.num(metrics.test_days, upload ? 1 : 0)} test days (${fmt.int(metrics.n_usable_test_windows)} one-minute windows). The alert lines were fixed on the ${trainingPeriod} before the test was scored.`,
   );
 
   const rows = metrics.rows;
@@ -21,8 +21,8 @@ try {
   const controls = el(
     "div",
     { class: "controls" },
-    segmented({ label: "Threshold percentile", options: percentiles.map((p) => [p, `${p}th`]), value: percentile, onChange: (v) => { percentile = v; paint(); } }),
-    segmented({ label: "Scores", options: SETS, value: scoreSet, onChange: (v) => { scoreSet = v; paint(); } }),
+    segmented({ label: "Alert line", options: percentiles.map((p, i) => [p, i === 0 ? "Normal" : "Stricter"]), value: percentile, onChange: (v) => { percentile = v; paint(); } }),
+    segmented({ label: "Score", options: SETS, value: scoreSet, onChange: (v) => { scoreSet = v; paint(); } }),
   );
   const tableHost = el("div");
   const delayHost = el("div");
@@ -37,14 +37,14 @@ try {
     const data = selected();
     tableHost.replaceChildren(
       sortableTable({
-        caption: `Results at the ${percentile}th-percentile threshold`,
-        note: "Click a column heading to sort. Threshold values are in each model's own score units.",
+        caption: `Results with the ${percentile === percentiles[0] ? "normal" : "stricter"} alert line`,
+        note: "Click a column heading to sort.",
         columns: [
           { key: "model_label", label: "Model", render: (r) => el("span", {}, el("b", {}, r.model_label), el("span", { class: "muted small" }, ` ${r.score_label}`)) },
-          { key: "threshold", label: "Threshold", align: "right", render: (r) => fmt.num(r.threshold, Math.abs(r.threshold) < 10 ? 3 : 1) },
-          { key: "alert_window_fraction", label: "Windows flagged", align: "right", render: (r) => el("span", { class: "cell-bar" }, el("span", { class: "num" }, fmt.pct(r.alert_window_fraction, r.alert_window_fraction < 0.01 ? 2 : 1)), el("span", { class: "meter" }, el("i", { style: `width:${Math.min(100, (r.alert_window_fraction / MAX_FLAGGED_SCALE) * 100)}%;--i:${data.indexOf(r)}` }))) },
-          ids.length ? { key: "events_detected", label: "Reported windows detected", render: (r) => el("span", {}, eventPills(r.detected_event_ids, ids.length), el("span", { class: "muted small" }, `  ${r.events_detected} of ${ids.length}`)) } : null,
-          { key: "n_alert_events", label: "Alert events", align: "right", render: (r) => fmt.int(r.n_alert_events) },
+          { key: "threshold", label: "Alert line (score)", align: "right", render: (r) => fmt.num(r.threshold, Math.abs(r.threshold) < 10 ? 3 : 1) },
+          { key: "alert_window_fraction", label: "Time with an alert", align: "right", render: (r) => el("span", { class: "cell-bar" }, el("span", { class: "num" }, fmt.pct(r.alert_window_fraction, r.alert_window_fraction < 0.01 ? 2 : 1)), el("span", { class: "meter" }, el("i", { style: `width:${Math.min(100, (r.alert_window_fraction / MAX_FLAGGED_SCALE) * 100)}%;--i:${data.indexOf(r)}` }))) },
+          ids.length ? { key: "events_detected", label: upload ? "Problems caught" : "Leaks caught", render: (r) => el("span", {}, eventPills(r.detected_event_ids, ids.length), el("span", { class: "muted small" }, `  ${r.events_detected} of ${ids.length}`)) } : null,
+          { key: "n_alert_events", label: "Alert episodes", align: "right", render: (r) => fmt.int(r.n_alert_events) },
           { key: "unconfirmed_alerts_per_day", label: "Unconfirmed alerts per day", align: "right", render: (r) => fmt.num(r.unconfirmed_alerts_per_day, 1) },
         ].filter(Boolean),
         rows: data,
@@ -83,13 +83,23 @@ try {
 
   wrap.append(...compact(
     controls,
+    el("div", { class: "how-to" },
+      el("b", {}, "What the columns mean"),
+      el("ul", { class: "glossary" },
+        el("li", {}, el("b", {}, "Alert line"), ": the score above which a minute counts as an alert, in the detector's own units."),
+        el("li", {}, el("b", {}, "Time with an alert"), ": share of test minutes above the line. On normal data this would be about 1% (normal line) or 0.5% (stricter)."),
+        ids.length ? el("li", {}, el("b", {}, upload ? "Problems caught" : "Leaks caught"), `: reported windows with an alert during them or up to ${context.lead_tolerance_hours} h before.`) : null,
+        el("li", {}, el("b", {}, "Alert episodes"), `: alerts less than ${context.merge_gap_minutes} minutes apart joined into one.`),
+        el("li", {}, el("b", {}, "Unconfirmed alerts per day"), ": episodes outside every reported window. Nobody checked the machine then, so they are not known to be false alarms."),
+        el("li", {}, el("b", {}, "Main / second score"), ": some detectors give two scores (for example, the VAE's rebuild error and its ELBO); the main one is used everywhere else."),
+      )),
     tableHost,
     detectionNote,
-    ids.length ? el("h2", {}, "Detection delay") : null,
+    ids.length ? el("h2", {}, "How early was the first alert?") : null,
     ids.length ? delayHost : null,
     ids.length ? el("p", { class: "muted small" }, `A delay close to −${context.lead_tolerance_hours} h means an alert event was already running when the lead range began; the delay is clipped to the start of the range. It does not show that the failure was anticipated. This project makes no prediction claim.`) : null,
 
-    el("h2", {}, "Does the threshold choice matter?"),
+    el("h2", {}, "Normal versus stricter alert line"),
     plainTable({
       caption: `${low}th against ${high}th percentile, primary scores`,
       note: `Moving to the ${high}th percentile lowers the flagged share for some models and barely moves others.`,
@@ -121,7 +131,7 @@ try {
     ),
     upload && !markov ? el("p", { class: "muted small" }, "The Markov chain was skipped for this file: no sensor showed two or more distinct operating states in the training period.") : null,
 
-    el("h2", {}, "Evidence that thresholds were frozen first"),
+    el("h2", {}, "Proof that the alert lines were locked first"),
     el("p", {}, `Each model's thresholds were fitted on the held-out end of the ${trainingPeriod} and ${upload ? "recorded" : "written to disk"} before that model scored any test window. These are the recorded times.`),
     plainTable({
       caption: "Frozen thresholds",
