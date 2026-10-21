@@ -1,4 +1,5 @@
 import { lineChart } from "./charts.js";
+import { latentExplorer } from "./latent-explorer.js";
 import { compact, el, fmt, footer, initShell, isUpload, loadJSON, plainTable, showError } from "./app.js";
 
 const RBM_COLOURS = { 1: "--brand", 5: "--alert", 10: "--ink-2" };
@@ -11,7 +12,7 @@ function heat(value) {
 }
 
 try {
-  const [context, audit, training] = await Promise.all([loadJSON("context"), loadJSON("audit"), loadJSON("training")]);
+  const [context, audit, training, latent] = await Promise.all([loadJSON("context"), loadJSON("audit"), loadJSON("training"), loadJSON("latent")]);
   const upload = isUpload(context);
   const nWindows = context.windows.length;
   const { wrap } = initShell(
@@ -149,6 +150,10 @@ try {
       ? `The best validation loss came at epoch ${bestEpoch} of ${training.vae.epoch.length}, and the weights from that epoch were kept for scoring.`
       : `The best validation loss came at epoch ${bestEpoch} of ${training.vae.epoch.length}; the early-stopping rule never triggered. Training loss peaked at ${fmt.int(spike.v)} in epoch ${training.vae.epoch[spike.i]} and recovered. The cause is a near-constant digital signal that is almost always off in the training month, so its rare activations become extreme values after standardising.`),
     el("div", { id: "vae-loss" }),
+    el("h3", {}, "What the VAE learned, in 3-D"),
+    el("p", {}, `The VAE squeezes every minute into 6 numbers (its "latent space") and rebuilds the minute from them. To let you see that space, the 6 numbers are flattened to 3 (with PCA, which keeps ${fmt.pct(latent.explained_variance.reduce((a, b) => a + b, 0), 0)} of the spread). Each dot is one minute. Dots close together are minutes the VAE sees as similar. ${upload ? "Learning-period" : "February"} minutes form the normal cloud; minutes far from it are rebuilt badly and become alerts.`),
+    el("p", { class: "muted small" }, `Showing ${fmt.int(latent.points.x.length)} minutes: every minute inside a ${upload ? "reported problem" : "leak"} plus a random sample of the rest. Drag to turn, scroll or pinch to zoom, hover a dot to read it.`),
+    el("div", { id: "latent", class: "latent" }),
     footer(context),
   ));
 
@@ -157,6 +162,7 @@ try {
       { label: `k = ${k}, training`, xs: h.epoch, ys: h[`fit_${metric}`], colour: RBM_COLOURS[k] },
       { label: `k = ${k}, validation`, xs: h.epoch, ys: h[`validation_${metric}`], colour: RBM_COLOURS[k], dash: [5, 4] },
     ]);
+  latentExplorer(document.getElementById("latent"), latent, { leakWord: upload ? "reported problem" : "leak" });
   lineChart(document.getElementById("rbm-error"), { title: "Reconstruction error", subtitle: "squared error per visible unit", series: rbmSeries("reconstruction_error"), xLabel: "epoch", yLabel: "error" });
   lineChart(document.getElementById("rbm-energy"), { title: "Mean free energy", subtitle: "lower means the data looks more typical to the model", series: rbmSeries("mean_free_energy"), xLabel: "epoch", yLabel: "free energy" });
   lineChart(document.getElementById("vae-loss"), {
