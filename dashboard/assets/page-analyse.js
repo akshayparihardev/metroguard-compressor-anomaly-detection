@@ -5,6 +5,7 @@ import { DEFAULTS, WINDOW_CHOICES } from "./analysis/pipeline.js";
 import { detectTimestampFormat, parserForKind } from "./analysis/timestamps.js";
 import { compact, el, fmt, initShell, segmented, showError } from "./app.js";
 import { ACCEPTED, readUploadedFile, withSheet } from "./file-import.js";
+import { playLottie } from "./motion.js";
 import { deleteAnalysis, loadAnalysis, saveAnalysis, setShowingAnalysis, showingAnalysis } from "./saved-analysis.js";
 
 const ROLES = [["timestamp", "Timestamp"], ["analog", "Sensor (numeric)"], ["digital", "On/off (0 or 1)"], ["ignore", "Ignore"]];
@@ -56,7 +57,7 @@ try {
   const state = {
     file: null, table: null, roles: [], timestampKind: null, timestampNote: "", confirmed: true,
     trainPeriod: DEFAULTS.split.trainPeriod, trainShare: 20, windowSeconds: "auto", stateColumn: "auto",
-    kValues: new Set(DEFAULTS.rbm.kValues), windows: [], worker: null, timer: null,
+    kValues: new Set(DEFAULTS.rbm.kValues), windows: [], worker: null, timer: null, loader: null,
   };
 
   const savedHost = el("div");
@@ -81,6 +82,7 @@ try {
       el("ul", { class: "list" },
         el("li", {}, "One row per reading and a timestamp column: ISO dates, day-first or month-first dates, Unix time, or spreadsheet date cells."),
         el("li", {}, "At least one numeric sensor column. Columns holding only 0 and 1 are read as on/off signals."),
+        el("li", {}, "It does not need MetroPT's columns. Any sensors work: the method only needs a time and numbers. If something a detector needs is missing, that detector is skipped and the results say why."),
         el("li", {}, "Enough history for a training period and a later test period. By default the models learn from the first calendar month and are tested on everything after it."),
         el("li", {}, "For PDFs, a table with selectable text (not a scan). Reading tables from PDF is approximate, so the preview must be checked."),
       )),
@@ -278,11 +280,30 @@ try {
     return list;
   }
 
+  /** What the chosen columns allow: every detector needs one sensor; the rest depends on the file. */
+  function capabilities() {
+    const sensors = state.roles.filter((r) => r === "analog").length;
+    const switches = state.roles.filter((r) => r === "digital").length;
+    const signals = sensors + switches;
+    const yes = (text) => ({ ok: true, text });
+    const maybe = (text) => ({ ok: null, text });
+    const no = (text) => ({ ok: false, text });
+    return [
+      sensors ? yes(`Simple statistics, RBM and VAE: run on your ${sensors} sensor${sensors === 1 ? "" : "s"}${switches ? ` and ${switches} on/off signal${switches === 1 ? "" : "s"}` : ""}.`) : no("Simple statistics, RBM and VAE need at least one numeric sensor column."),
+      sensors ? maybe("Markov chain: runs if one sensor has two or more clear levels (like a motor that is off, low or high). Checked when the analysis runs.") : no("Markov chain: needs a numeric sensor."),
+      signals >= 2 ? yes("Bayesian network: looks for links between your signals.") : no("Bayesian network: needs at least two signals to find links, so it will show none."),
+      state.windows.length ? yes(`Leaks caught and delays: measured against your ${state.windows.length} reported window${state.windows.length === 1 ? "" : "s"}.`) : no("Leaks caught: add reported windows below to measure this. Without them you still get scores and alert rates."),
+      maybe("Sensors that are blank or never change in the training period are left out automatically, and you are told which."),
+    ];
+  }
+
   function paintRun(message) {
     const issues = problems();
     runSection.replaceChildren(...compact(
       stepHead(4, "Run the analysis"),
       message,
+      state.table ? el("div", { class: "how-to" }, el("b", {}, "What will run with your columns"),
+        el("ul", { class: "capabilities" }, capabilities().map((c) => el("li", { class: c.ok === true ? "yes" : c.ok === false ? "no" : "maybe" }, c.text)))) : null,
       issues.length ? el("ul", { class: "problems" }, issues.map((text) => el("li", {}, text))) : null,
       el("div", { class: "run-row" },
         el("button", { class: "btn primary big", type: "button", disabled: issues.length > 0, onclick: run }, "Run the analysis"),
@@ -318,12 +339,15 @@ try {
     state.worker?.terminate();
     state.worker = null;
     clearInterval(state.timer);
+    state.loader?.then((animation) => animation.destroy()).catch(() => {});
+    state.loader = null;
     setEditing(true);
   }
 
   function run() {
     const started = performance.now();
     const bar = el("i");
+    const loader = el("span", { class: "loader", "aria-hidden": "true" });
     const percent = el("b", { class: "num" }, "0%");
     const message = el("span", {}, "Starting");
     const elapsed = el("span", { class: "muted small num" }, "0 s");
@@ -332,7 +356,7 @@ try {
     runSection.replaceChildren(
       stepHead(4, "Running the analysis"),
       el("div", { class: "progress" },
-        el("div", { class: "progress-top" }, percent, message, elapsed),
+        el("div", { class: "progress-top" }, loader, percent, message, elapsed),
         meter,
         el("ol", { class: "stage-list" }, stageItems),
         el("div", { class: "run-row" },
@@ -341,6 +365,8 @@ try {
       ),
     );
     setEditing(false);
+    state.loader = playLottie(loader, "./animations/analysis-loader.json");
+    state.loader.catch(() => {});
     state.timer = setInterval(() => { elapsed.textContent = fmt.seconds((performance.now() - started) / 1000); }, 1000);
 
     const worker = new Worker(new URL("./analysis/worker.js", import.meta.url), { type: "module" });
