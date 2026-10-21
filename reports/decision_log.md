@@ -659,6 +659,42 @@ changed):
   charts, simpler table columns on the alert explanation, and the independence checks folded into a "Technical
   checks" section.
 
+## GSAP, Three.js and Lottie, and files that differ from MetroPT (2026-10-21)
+
+**Libraries.** The author asked for the three chosen skills (GSAP motion, a Three.js view of the VAE latent space,
+a Lottie loader). The libraries were downloaded from the npm registry, checked against the registry checksums, and
+vendored unmodified: GSAP 3.12.5 with ScrollTrigger (GreenSock no-charge licence), three.js 0.169.0 with
+OrbitControls (MIT), lottie-web 5.12.2 light player (MIT). Each loads only on the page that uses it; no build step.
+- *GSAP* (`assets/motion.js`, from the `gsap-scrolltrigger` and `gsap-performance` skills): on the overview, each
+  step rises in as it scrolls into view, the window counts count up, the result bars grow, and the sticky step bar
+  highlights the step being read. Only transforms and opacity are animated, and content is never hidden up front,
+  so the page is complete if animation never runs; nothing runs under reduced motion.
+- *Three.js* (`assets/latent-explorer.js`, `threejs-interaction` skill) on The data page: one dot per minute,
+  placed by the VAE's 6 latent numbers reduced to 3 with PCA (91% of the spread kept), coloured by learning vs
+  test, VAE alerts, or leaks; drag to turn, zoom, hover for the date. The scale is set on the February cloud and far
+  points are compressed with asinh, because scaling on the outliers shrank the normal cloud to a speck. For
+  MetroGuard the points come from a new `latent.json`: step 10 loads the saved `vae.pt` (no retraining), takes the
+  latent means (new `latent_means()` in the VAE module) and projects them with `build_latent()`, whose PCA axes are
+  fitted on the fit windows only; all 4,938 minutes inside the four leaks are kept plus a seeded sample, 12,000 in
+  all. One new pytest covers it (44 pass). The other data files are unchanged apart from run times.
+- *Lottie* (`assets/animations/analysis-loader.json`, `text-to-lottie` loader recipe): a 2 s seamless loop, a ring
+  arc sweeping with eased trim and three phase-offset dots, transparent; colours come from the site theme through
+  layer classes. It plays while an analysis runs and is removed when it ends; under reduced motion it shows one
+  still frame.
+
+**Files that do not look like MetroPT.** The method needs only a time column and numbers; nothing in it is tied to
+MetroPT's columns. Real-data variants were run through the engine (hourly means of the MetroPT file cut down):
+one sensor only, no on/off columns, a sensor blank in a third or in 90% of rows, a constant sensor, two weeks, one
+month. All ran except the too-short ones, which stop with a clear message. Two problems were fixed:
+- A sensor blank in 90% of rows silently cut the usable test windows from 621 to 349 (every window needs every
+  sensor). Sensors blank in more than half, or never changing, in the *training period* are now left out with a
+  note (judged on training rows only, so no test data is used). Test windows went back to 621. MetroPT loses none.
+- A test period under 7 days now carries a note that the alert rates are rough.
+The analyse page now shows **"What will run with your columns"** before the run: which detectors run, which may be
+skipped (the Markov chain needs a sensor with clear levels, the network needs two signals, detection needs
+reported windows) and why. The "too little data" messages now say what to change. One engine test was added
+(14 pass).
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train

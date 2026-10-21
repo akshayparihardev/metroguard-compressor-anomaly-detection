@@ -88,9 +88,10 @@ DL 2 Project/                              # repo root: only what a reader needs
 ├── dashboard/                             # static site (Vercel), step 10 and 10b extensions
 │   ├── index.html, metrics.html, scores.html, network.html, data.html, claims.html, analyse.html
 │   ├── assets/                            # styles.css, app.js, charts.js, linemap.js, page-*.js, fonts/,
-│   │   │                                  # file-import.js, saved-analysis.js
+│   │   │                                  # file-import.js, saved-analysis.js, motion.js (GSAP, Lottie),
+│   │   │                                  # latent-explorer.js (three.js), animations/ (Lottie JSON)
 │   │   ├── analysis/                      # step 10b: the pipeline in JavaScript, run in a Web Worker
-│   │   └── vendor/                        # SheetJS and pdf.js, loaded only for Excel and PDF uploads
+│   │   └── vendor/                        # SheetJS, pdf.js, GSAP, three.js, lottie-web (each loaded where used)
 │   ├── tests/                             # node --test unit tests for assets/analysis
 │   └── data/                              # generated JSON (committed so Vercel can serve it)
 ├── outputs/                               # machine artifacts, git-ignored, always regenerable

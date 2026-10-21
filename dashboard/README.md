@@ -15,9 +15,13 @@ assets/
   linemap.js        the metro-line timeline on the overview
   page-*.js         one script per page
   file-import.js    reads a chosen CSV, Excel or PDF file into a previewable table
+  motion.js         GSAP scroll motion for the overview and the Lottie player, both skipped under reduced motion
+  latent-explorer.js three.js view of the VAE latent space (The data page)
+  animations/       Lottie JSON (the analysis loader)
   saved-analysis.js keeps the visitor's latest analysis in IndexedDB
   analysis/         the pipeline in JavaScript (steps 1 to 8), run in a Web Worker (worker.js)
-  vendor/           SheetJS and pdf.js (Apache 2.0), loaded only when an Excel or PDF file is chosen
+  vendor/           SheetJS and pdf.js (for Excel and PDF uploads), GSAP, three.js and lottie-web; each loads only
+                    where it is used (licences in vendor/THIRD_PARTY_LICENSES.txt)
   fonts/            Schibsted Grotesk and JetBrains Mono (SIL Open Font License)
 data/               generated JSON, committed so the site can be served without the pipeline
 tests/              node --test unit tests for assets/analysis (not deployed)

@@ -156,7 +156,12 @@ in the browser until the visitor deletes them.
   audit, the split, the z-score and Markov thresholds and every detection exactly, and the network reaches the same
   BIC score. The RBM and VAE flag 20.2-21.6% of windows against Python's 19.9-21.4%, because their random numbers
   come from a different generator (details in the decision log).
+- 🧩 **Any sensors, not just MetroPT's.** Only a time column and numbers are needed. Before running, the page lists
+  what will run with your columns; detectors that need something your file lacks are skipped with a reason, and
+  sensors that are blank or constant in the training period are left out and named.
 - ↩️ When no file is analysed, every page shows the MetroGuard results exactly as before, and a banner switches back.
+- ✨ Motion and 3-D: GSAP scroll animation on the overview, a three.js view of the VAE's latent space, and a
+  Lottie loader while an analysis runs, all skipped for visitors who prefer reduced motion.
 
 ```
 node --test --disable-warning=MODULE_TYPELESS_PACKAGE_JSON "dashboard/tests/*.test.mjs"
