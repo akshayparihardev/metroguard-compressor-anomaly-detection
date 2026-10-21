@@ -629,6 +629,17 @@ network search depended on the JavaScript engine (see above).
 confirmed. A short file can fail the split with a clear message ("too few windows"). The JavaScript models run on
 the CPU, so they are slower than the GPU pipeline.
 
+## Plain-language overview (2026-10-21)
+
+The author found the site too technical for a first-time visitor: the problem and the solution were not clear at a
+glance. The overview page was rewritten as a four-part story: **the problem** (a metro compressor, 1,516,948
+readings, only 4 reported leaks), **how we solved it** (learn normal from February, score later windows, lock an
+alert line on normal data, check alerts against the leaks), **what we found** (one table: share of time with an
+alert and leaks caught per detector, plus three plain findings and the timeline), and **links to the details**. The
+menu now uses everyday names (Timeline, Results table, Sensor links, The data, Honest limits, Try your own data);
+the detailed pages are unchanged. Every number is still read from `dashboard/data`, and the honest framing stays
+(catching all four leaks is easy for a detector that alerts often; "unusual" is not "broken").
+
 ## Possible future work
 
 - Clip or robustly scale near-constant features (such as `LPS_active_fraction`) before the VAE, and train

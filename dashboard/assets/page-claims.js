@@ -120,7 +120,7 @@ try {
   const upload = isUpload(context);
   const { wrap } = initShell(
     "claims.html",
-    "Claims and limits",
+    "Honest limits",
     upload
       ? "What this analysis of your file supports, what it does not, and which words the dashboard uses on purpose."
       : "A prototype built on four reported events from one compressor. This page says what that supports, what it does not, and which words the project uses on purpose.",
@@ -132,6 +132,6 @@ try {
     footer(context),
   );
 } catch (error) {
-  initShell("claims.html", "Claims and limits");
+  initShell("claims.html", "Honest limits");
   showError(error);
 }

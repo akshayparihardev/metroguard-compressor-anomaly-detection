@@ -4,12 +4,12 @@ import { loadAnalysis, setShowingAnalysis, showingAnalysis } from "./saved-analy
 
 const NAV = [
   ["index.html", "Overview"],
-  ["metrics.html", "Metrics"],
-  ["scores.html", "Scores over time"],
-  ["network.html", "Bayesian network"],
-  ["data.html", "Data and training"],
-  ["claims.html", "Claims and limits"],
-  ["analyse.html", "Analyse your data"],
+  ["scores.html", "Timeline"],
+  ["metrics.html", "Results table"],
+  ["network.html", "Sensor links"],
+  ["data.html", "The data"],
+  ["claims.html", "Honest limits"],
+  ["analyse.html", "Try your own data"],
 ];
 
 const cache = new Map();
@@ -242,7 +242,7 @@ export function footer(context) {
       {},
       "Every number on this site is read from files the pipeline produced (",
       el("code", {}, "dashboard/data"),
-      "). Nothing is estimated here, and no model runs in your browser.",
+      "). Nothing on these pages is estimated.",
     ),
     el(
       "p",

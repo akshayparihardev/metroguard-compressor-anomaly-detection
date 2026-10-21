@@ -16,7 +16,7 @@ try {
   const nWindows = context.windows.length;
   const { wrap } = initShell(
     "data.html",
-    "Data and training",
+    "The data",
     `What the ${upload ? "uploaded" : "raw"} file contains, where it is incomplete, and how the RBM and the VAE behaved while training.`,
   );
   const days = audit.span.split(" ")[0];
@@ -161,6 +161,6 @@ try {
     logY: true, xLabel: "epoch", yLabel: "loss", vline: { x: bestEpoch, label: `best epoch ${bestEpoch}` },
   });
 } catch (error) {
-  initShell("data.html", "Data and training");
+  initShell("data.html", "The data");
   showError(error);
 }

@@ -35,7 +35,7 @@ try {
   const upload = isUpload(context);
   const { wrap } = initShell(
     "network.html",
-    "Bayesian network",
+    "Sensor links",
     `A network of sensor states learned on the ${upload ? "training period" : "training month"} only. Arrows are statistical dependencies, not causes, and some directions are arbitrary.`,
   );
 
@@ -160,6 +160,6 @@ try {
   ));
   refresh();
 } catch (error) {
-  initShell("network.html", "Bayesian network");
+  initShell("network.html", "Sensor links");
   showError(error);
 }

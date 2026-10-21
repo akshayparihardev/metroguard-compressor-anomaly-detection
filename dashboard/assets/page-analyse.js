@@ -49,7 +49,7 @@ function options(list, current) {
 try {
   const { wrap } = initShell(
     "analyse.html",
-    "Analyse your data",
+    "Try your own data",
     "Run the same pipeline on your own time-series file: the z-score baseline, the RBM, the VAE, the Markov chain and the Bayesian network, with thresholds frozen before any test window is scored.",
   );
 
@@ -394,13 +394,13 @@ try {
       saved
         ? el("div", { class: "run-row" },
             el("a", { class: "btn primary big", href: "index.html" }, "Open the results"),
-            el("a", { class: "btn", href: "scores.html" }, "Scores over time"),
+            el("a", { class: "btn", href: "scores.html" }, "Timeline"),
             el("button", { class: "btn", type: "button", onclick: () => { paintRun(); paintSaved(); } }, "Change settings and run again"))
         : el("div", { class: "note warn", role: "alert" }, el("p", {}, "This browser would not store the results, so the other pages cannot show them. Allow this site to store data (or leave private browsing) and run the analysis again.")),
     ));
     paintSaved();
   }
 } catch (error) {
-  initShell("analyse.html", "Analyse your data");
+  initShell("analyse.html", "Try your own data");
   showError(error);
 }

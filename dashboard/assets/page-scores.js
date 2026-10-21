@@ -14,7 +14,7 @@ try {
   const ids = eventIds(context);
   const { wrap } = initShell(
     "scores.html",
-    "Scores over time",
+    "Timeline",
     `Each panel is one model's anomaly score. Orange marks scores above the threshold fixed on the ${upload ? "training period" : "training month"}${ids.length ? ", and red bands are the reported failure windows" : ""}.`,
   );
 
@@ -160,6 +160,6 @@ try {
   );
   await draw(true);
 } catch (error) {
-  initShell("scores.html", "Scores over time");
+  initShell("scores.html", "Timeline");
   showError(error);
 }

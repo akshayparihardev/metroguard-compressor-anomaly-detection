@@ -10,7 +10,7 @@ try {
   const trainingPeriod = upload ? "training period" : "training month";
   const { wrap } = initShell(
     "metrics.html",
-    "Metrics",
+    "Results table",
     `Event-level results on ${fmt.int(metrics.n_usable_test_windows)} usable test windows (${fmt.num(metrics.test_days, upload ? 1 : 0)} calendar days). Thresholds were fitted on the ${trainingPeriod} and frozen before each model scored test windows.`,
   );
 
@@ -136,6 +136,6 @@ try {
     footer(context),
   ));
 } catch (error) {
-  initShell("metrics.html", "Metrics");
+  initShell("metrics.html", "Results table");
   showError(error);
 }
