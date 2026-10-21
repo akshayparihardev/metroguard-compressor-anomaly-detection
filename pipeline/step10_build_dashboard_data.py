@@ -4,11 +4,13 @@ import argparse
 import json
 
 import pandas as pd
+import torch
 
 from metroguard import artifact_names as artifacts
 from metroguard.alerting.event_evaluation import scored_models
 from metroguard.config_loader import PROJECT_ROOT, load_config
 from metroguard.data.failure_windows import REPORTED_FAILURE_WINDOWS
+from metroguard.models import variational_autoencoder as vae_lib
 from metroguard.reporting import dashboard_export as export
 from metroguard.step_run_tracking import (
     config_fingerprint,
@@ -41,6 +43,8 @@ def main() -> None:
         tables / artifacts.NETWORK_ALERT_CONTEXT_FILE,
         paths.reports_dir / "data_audit_report.md",
         *[paths.scores_dir / f for f in artifacts.SCORE_FILES],
+        paths.processed_dir / artifacts.STANDARDISED_FEATURES_FILE,
+        paths.models_dir / artifacts.VAE_WEIGHTS_FILE,
     ]
     event_files = [f"event_{w.event_id}.json" for w in REPORTED_FAILURE_WINDOWS]
     outputs = [
@@ -52,11 +56,15 @@ def main() -> None:
             "audit.json",
             "network.json",
             "context.json",
+            "latent.json",
             *event_files,
         )
     ]
     fingerprint = config_fingerprint(
-        {k: sections[k] for k in ("seed", "windows", "alerts", "evaluation", "thresholds", "rbm")}
+        {
+            k: sections[k]
+            for k in ("seed", "windows", "alerts", "evaluation", "thresholds", "rbm", "vae")
+        }
     )
     if not args.force and is_step_up_to_date(
         STEP_NAME, paths.logs_dir, inputs, outputs, fingerprint
@@ -101,6 +109,7 @@ def main() -> None:
                 "score_labels": export.SCORE_LABELS,
             },
         }
+        files["latent.json"] = latent_view(paths, sections, thresholds, primary, config.seed)
         for window in REPORTED_FAILURE_WINDOWS:
             files[f"event_{window.event_id}.json"] = export.build_event_series(
                 models, thresholds, window.event_id, lead_hours, primary
@@ -115,6 +124,25 @@ def main() -> None:
             DASHBOARD_DATA_DIR,
             sum(sizes.values()) / 1024,
         )
+
+
+def latent_view(paths, sections: dict, thresholds: dict, primary: float, seed: int) -> dict:
+    """Latent means from the saved VAE weights (no retraining), projected to 3-D."""
+    standardised = pd.read_parquet(paths.processed_dir / artifacts.STANDARDISED_FEATURES_FILE)
+    scores = pd.read_parquet(paths.scores_dir / artifacts.VAE_SCORES_FILE)
+    if not standardised["window_start"].equals(scores["window_start"]):
+        raise ValueError("Standardised features and VAE scores are not row-aligned")
+    features = torch.from_numpy(standardised.drop(columns="window_start").to_numpy(dtype="float32"))
+    vae_config = sections["vae"]
+    model = vae_lib.VariationalAutoencoder(
+        features.shape[1], vae_config["hidden_sizes"], vae_config["latent_dim"]
+    )
+    weights = paths.models_dir / artifacts.VAE_WEIGHTS_FILE
+    model.load_state_dict(torch.load(weights, map_location="cpu", weights_only=True))
+    latent = vae_lib.latent_means(model, features).numpy()
+    line = thresholds["vae"]["reconstruction_error"]["thresholds"][f"{primary:g}"]
+    alert = (scores["reconstruction_error"] > line).to_numpy()
+    return export.build_latent(latent, scores[["window_start", "split", "usable"]], alert, seed)
 
 
 if __name__ == "__main__":

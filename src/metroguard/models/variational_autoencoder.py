@@ -145,3 +145,10 @@ def anomaly_scores(model: VariationalAutoencoder, data: torch.Tensor) -> torch.T
     reconstruction, mean, log_variance = model(data, sample=False)
     squared_error, kl = loss_terms(data, reconstruction, mean, log_variance)
     return torch.stack([squared_error / data.shape[1], squared_error + kl], dim=1)
+
+
+@torch.no_grad()
+def latent_means(model: VariationalAutoencoder, data: torch.Tensor) -> torch.Tensor:
+    """Mean of q(z | x) for each row: where the encoder places a window in the latent space."""
+    model.eval()
+    return model.encode(data)[0]

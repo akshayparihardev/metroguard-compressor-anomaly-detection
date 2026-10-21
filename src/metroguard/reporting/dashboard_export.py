@@ -29,6 +29,8 @@ SCORE_LABELS = {
     "negative_elbo": "negative ELBO",
     "max_transition_surprisal": "transition surprisal",
 }
+LATENT_POINTS = 12_000
+LATENT_SPLIT_CODES = {"fit_train": 0, "fit_validation": 0, CALIB: 1, TEST: 2}
 EVENT_PAD_BEFORE_HOURS = 3
 EVENT_PAD_AFTER_HOURS = 12
 VALUE_DECIMALS = 4
@@ -381,6 +383,52 @@ def build_network(edges: pd.DataFrame, nodes: list[str], demonstrations: str, co
             "model": model_used.group(1),
             "score": model_used.group(2),
             "events": events,
+        },
+    }
+
+
+def build_latent(
+    latent: np.ndarray,
+    table: pd.DataFrame,
+    alert: np.ndarray,
+    seed: int,
+    max_points: int = LATENT_POINTS,
+) -> dict:
+    """3-D PCA view of the VAE latent means, in the same shape as the browser engine's latent.json.
+
+    The axes are fitted on the fit windows only. Every usable window inside a reported window
+    is kept; the rest is a seeded random sample.
+    """
+    usable = table["usable"].to_numpy()
+    split = table["split"].to_numpy()
+    fit = usable & np.isin(split, ["fit_train", "fit_validation"])
+    mean = latent[fit].mean(axis=0)
+    covariance = np.cov(latent[fit] - mean, rowvar=False, bias=True)
+    values, vectors = np.linalg.eigh(covariance)
+    order = np.argsort(values)[::-1]
+    values, vectors = np.clip(values[order], 0, None), vectors[:, order]
+    axes = vectors[:, :3]
+    starts = pd.to_datetime(table["window_start"])
+    event = np.zeros(len(table), dtype=int)
+    for window in REPORTED_FAILURE_WINDOWS:
+        event[((starts >= window.start) & (starts <= window.end)).to_numpy()] = window.event_id
+    candidates = np.flatnonzero(usable)
+    keep = candidates[event[candidates] > 0]
+    rest = candidates[event[candidates] == 0]
+    sampled = min(len(rest), max(0, max_points - len(keep)))
+    rest = np.random.default_rng(seed).permutation(rest)[:sampled]
+    rows = np.sort(np.concatenate([keep, rest]))
+    projected = (latent[rows] - mean) @ axes
+    return {
+        "explained_variance": [round(float(v), 4) for v in values[:3] / max(values.sum(), 1e-12)],
+        "points": {
+            "x": [round(float(v), 3) for v in projected[:, 0]],
+            "y": [round(float(v), 3) for v in projected[:, 1]],
+            "z": [round(float(v), 3) for v in projected[:, 2]],
+            "split": [LATENT_SPLIT_CODES[s] for s in split[rows]],
+            "alert": [int(a) for a in alert[rows]],
+            "event": [int(e) for e in event[rows]],
+            "minute": [epoch_minutes(t) for t in starts.iloc[rows]],
         },
     }
 
