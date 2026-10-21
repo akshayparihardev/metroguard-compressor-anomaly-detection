@@ -100,6 +100,41 @@ export function frozenValueRuns(time, analogColumns, minMinutes) {
   return runs;
 }
 
+/**
+ * Leave out sensors that cannot help: blank in most of the training period, or never changing in it. Judged on the
+ * training-period readings only (first calendar month, or the first share of readings), so no test data is used.
+ */
+export function screenSensors(columns, splitOptions, minFilledShare = 0.5) {
+  const { time, analog } = columns;
+  let trainRows = time.length;
+  if (splitOptions.trainPeriod === "first_calendar_month") {
+    const first = new Date(time[0]);
+    const end = Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 1);
+    trainRows = time.findIndex((t) => t >= end);
+    if (trainRows < 0) trainRows = time.length;
+  } else {
+    trainRows = Math.max(1, Math.round(splitOptions.trainShare * time.length));
+  }
+  const kept = {};
+  const dropped = [];
+  for (const [name, values] of Object.entries(analog)) {
+    let filled = 0;
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < trainRows; i++) {
+      const v = values[i];
+      if (!Number.isFinite(v)) continue;
+      filled++;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    if (filled < minFilledShare * trainRows) dropped.push({ name, reason: `is blank in ${Math.round(100 * (1 - filled / trainRows))}% of the training-period rows` });
+    else if (max === min) dropped.push({ name, reason: "never changes in the training period" });
+    else kept[name] = values;
+  }
+  return { columns: { ...columns, analog: kept }, dropped };
+}
+
 /** Aggregate readings into fixed windows: analog means, std of selected signals, digital active fractions. */
 export function aggregateWindows(columns, windowSeconds, stdColumns) {
   const { time, analog, digital } = columns;
@@ -171,7 +206,7 @@ export function assignSplit(windowStart, usable, trainEnd, calibFraction, valida
   const nFit = train.length - nCalib;
   const nValidation = pyRound(validationFraction * nFit);
   if (nFit - nValidation < 1 || nCalib < 1 || nValidation < 1) {
-    throw new Error(`Only ${train.length} usable windows fall in the training period, which is too few to split. Choose a longer training period.`);
+    throw new Error(`Only ${train.length} usable windows fall in the training period, which is too few to learn from. Choose “First share” with a larger share, or use a file that covers more time.`);
   }
   const calibStart = train[nFit];
   const validationStart = train[nFit - nValidation];

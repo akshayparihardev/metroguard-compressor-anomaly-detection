@@ -8,7 +8,7 @@ import { fitNetwork, layeredLayout, learnStructure, structurePatterns, blanketSu
 import { candidateStates, markovWindowScores } from "../assets/analysis/markov.js";
 import { createRng, digitize, percentile, quantileSorted } from "../assets/analysis/numeric.js";
 import { DEFAULTS, runPipeline } from "../assets/analysis/pipeline.js";
-import { aggregateWindows, assignSplit, frozenValueRuns, pyRound } from "../assets/analysis/preparation.js";
+import { aggregateWindows, assignSplit, frozenValueRuns, pyRound, screenSensors } from "../assets/analysis/preparation.js";
 import { createRbm, freeEnergy, trainRbm } from "../assets/analysis/rbm.js";
 import { createCsvParser, detectColumns } from "../assets/analysis/table-reader.js";
 import { detectTimestampFormat, parserForKind } from "../assets/analysis/timestamps.js";
@@ -68,6 +68,19 @@ test("frozen runs and window aggregation", () => {
   assert.equal(agg.readingCount[0], 6);
   assert.equal(agg.features.d_active_fraction[0], 0.5);
   assert.equal(agg.readingWindow[29], 4);
+});
+
+test("sensors blank or constant in the training period are left out, judged on training rows only", () => {
+  const time = Float64Array.from({ length: 60 * 24 * 40 }, (_, i) => Date.UTC(2021, 0, 1) + i * 60000);
+  const n = time.length;
+  const janEnd = time.findIndex((t) => t >= Date.UTC(2021, 1, 1));
+  const varying = Float32Array.from({ length: n }, (_, i) => Math.sin(i / 50));
+  const blank = Float32Array.from({ length: n }, (_, i) => (i % 4 === 0 ? 1 + (i % 7) : NaN));
+  const flatThenMoving = Float32Array.from({ length: n }, (_, i) => (i < janEnd ? 3 : i % 5));
+  const { columns, dropped } = screenSensors({ time, analog: { varying, blank, flatThenMoving }, digital: {} }, { trainPeriod: "first_calendar_month", trainShare: 0.2 });
+  assert.deepEqual(Object.keys(columns.analog), ["varying"]);
+  assert.deepEqual(dropped.map((d) => d.name), ["blank", "flatThenMoving"]);
+  assert.match(dropped[1].reason, /never changes/);
 });
 
 test("RBM free energy equals brute-force -log sum_h exp(-E(v,h))", () => {

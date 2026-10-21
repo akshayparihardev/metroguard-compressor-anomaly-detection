@@ -514,3 +514,23 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .how-to ul.glossary { display: grid; gap: 0.3rem; }
 .technical { margin-top: 2rem; border: 1px solid var(--line); border-radius: 12px; padding: 0.8rem 1rem; background: var(--surface); }
 .technical summary { cursor: pointer; font-weight: 600; color: var(--brand-ink); }
+.flow a.active { border-color: var(--brand); background: var(--brand-wash); color: var(--brand-ink); }
+.flow a.active .flow-n { background: var(--brand); color: var(--on-brand); }
+.latent { margin-top: 0.6rem; }
+.latent-wrap { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.latent-canvas canvas { display: block; cursor: grab; touch-action: none; }
+.latent-canvas canvas:active { cursor: grabbing; }
+.seg-plain button[aria-pressed="true"] { background: var(--surface-3); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16), 0 0 0 1px var(--line); }
+.sw-dot { width: 0.65rem; height: 0.65rem; border-radius: 50%; }
+.loader { width: 2.6rem; height: 2.6rem; flex: none; align-self: center; }
+.loader svg { display: block; }
+.loader .lt-track path { stroke: var(--line); }
+.loader .lt-arc path { stroke: var(--brand); }
+.loader .lt-dots path { fill: var(--brand); }
+.progress-top { align-items: center; }
+.how-to ul.capabilities { display: grid; gap: 0.35rem; }
+.capabilities li { position: relative; padding-left: 1.6rem; }
+.capabilities li::before { position: absolute; left: 0; top: 0; width: 1.15rem; height: 1.15rem; border-radius: 50%; display: grid; place-items: center; font-size: 0.72rem; font-weight: 800; }
+.capabilities li.yes::before { content: "✓"; background: var(--brand-wash); color: var(--brand-ink); }
+.capabilities li.no::before { content: "–"; background: var(--surface-2); color: var(--muted); }
+.capabilities li.maybe::before { content: "?"; background: var(--alert-wash); color: var(--ink); }

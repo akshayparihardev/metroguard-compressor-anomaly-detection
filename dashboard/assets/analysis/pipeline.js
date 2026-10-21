@@ -29,6 +29,7 @@ export const DEFAULTS = Object.freeze({
 const METROPT_STD_COLUMNS = ["Motor_current", "TP2", "TP3"];
 export const WINDOW_CHOICES = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400];
 const UNUSUAL_SHARE_FACTOR = 2;
+const SHORT_TEST_DAYS = 7;
 
 /** Window length: 60 s for readings every 10 s or faster, otherwise about six readings per window. */
 export function chooseWindowSeconds(cadenceSeconds) {
@@ -58,7 +59,7 @@ export async function runPipeline(rawColumns, meta, options = DEFAULTS, report =
 
   // ---- step 1: audit -------------------------------------------------------------------------------------
   report("audit", 0.02, "Sorting by time and auditing the record");
-  const { columns, cadence, frozenRuns, backwardSteps } = await timed("step01_audit_raw_data", () => {
+  const { columns: auditedColumns, cadence, frozenRuns, backwardSteps } = await timed("step01_audit_raw_data", () => {
     const sorted = prep.sortByTime(rawColumns);
     if (sorted.columns.time.length < 100) throw new Error("Fewer than 100 rows with a valid timestamp. Check the timestamp column.");
     return {
@@ -69,9 +70,11 @@ export async function runPipeline(rawColumns, meta, options = DEFAULTS, report =
     };
   });
   if (backwardSteps) notes.push(`The file was not in time order (${backwardSteps} backward steps); rows were sorted by time.`);
+  const { columns, dropped } = prep.screenSensors(auditedColumns, o.split);
+  for (const { name, reason } of dropped) notes.push(`${name} ${reason}, so it was left out.`);
   const analogNames = Object.keys(columns.analog);
   const digitalNames = Object.keys(columns.digital);
-  if (!analogNames.length) throw new Error("Choose at least one sensor (numeric) column to analyse.");
+  if (!analogNames.length) throw new Error(dropped.length ? `No usable sensor is left: ${dropped.map((d) => `${d.name} ${d.reason}`).join("; ")}.` : "Choose at least one sensor (numeric) column to analyse.");
 
   // ---- step 2: windows, split, fit-only transforms -------------------------------------------------------
   report("features", 0.08, "Building windows and the chronological split");
@@ -103,7 +106,7 @@ export async function runPipeline(rawColumns, meta, options = DEFAULTS, report =
   const fitValidation = rowsOf(prep.FIT_VALIDATION);
   const calibRows = rowsOf(prep.CALIB);
   const isTest = Uint8Array.from(split, (s) => (s === prep.TEST ? 1 : 0));
-  if (!isTest.some((v) => v)) throw new Error("No windows fall after the training period, so there is nothing to test. Choose a shorter training period.");
+  if (!isTest.some((v) => v)) throw new Error("Nothing is left after the training period to test on. Choose “First share” with a smaller share, or use a file that covers more time.");
   const percentiles = o.thresholds.percentiles;
   const frozenThresholds = [];
   const scored = [];
@@ -215,6 +218,7 @@ export async function runPipeline(rawColumns, meta, options = DEFAULTS, report =
     results: evaluateModel({ model: s.model, score: s.score, isPrimary: s.primary, starts: agg.windowStart, scores: s.values, split, usable, thresholds: s.thresholds, windows, settings }),
   })));
   const metricRows = evaluation.flatMap((e) => e.results.map((r) => r.row));
+  if (metricRows[0].test_days < SHORT_TEST_DAYS) notes.push(`The test period is only ${metricRows[0].test_days.toFixed(1)} days long, so the alert rates are rough.`);
 
   // ---- step 7: Bayesian network -----------------------------------------------------------------------------
   report("network", 0.86, "Learning the Bayesian network");
